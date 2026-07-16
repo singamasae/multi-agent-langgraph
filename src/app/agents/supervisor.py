@@ -53,11 +53,10 @@ def build_supervisor_runnable(llm: BaseChatModel) -> Runnable:
     return prompt | llm.with_structured_output(RouteResponse)
 
 
-def _has_writer_message(state: AgentState) -> bool:
-    """True if the Writer has already produced a message in the history."""
+def _has_message_from(state: AgentState, agent_name: str) -> bool:
+    """True if ``agent_name`` has already produced a message in the history."""
     return any(
-        getattr(message, "name", None) == AgentName.WRITER.value
-        for message in state["messages"]
+        getattr(message, "name", None) == agent_name for message in state["messages"]
     )
 
 
@@ -65,16 +64,26 @@ def make_supervisor_node(supervisor: Runnable) -> Callable[[AgentState], dict]:
     """Adapt the supervisor runnable into a LangGraph node.
 
     Writes only ``next`` — the supervisor never adds messages to the history.
-    Enforces one invariant the LLM router cannot be trusted to keep: the Writer
-    must deliver the final answer before the graph finishes, so a premature
-    FINISH is redirected to the Writer.
+
+    A lightweight LLM router cannot be trusted to follow the pipeline, so this
+    enforces it deterministically: gather research first, then compose the
+    answer, and only FINISH after the Writer has delivered it. The router still
+    controls when to loop back for more research.
     """
 
     def supervisor_node(state: AgentState) -> dict:
         decision = supervisor.invoke(state)
         next_node = decision.next
 
-        if next_node == FINISH and not _has_writer_message(state):
+        has_research = _has_message_from(state, AgentName.RESEARCHER.value)
+        has_answer = _has_message_from(state, AgentName.WRITER.value)
+
+        if not has_research:
+            # Nothing to write from yet — research must happen first.
+            if next_node != AgentName.RESEARCHER.value:
+                logger.info("No research yet; overriding %s -> Researcher", next_node)
+            next_node = AgentName.RESEARCHER.value
+        elif next_node == FINISH and not has_answer:
             logger.info("Supervisor chose FINISH before the Writer ran; routing to Writer")
             next_node = AgentName.WRITER.value
 

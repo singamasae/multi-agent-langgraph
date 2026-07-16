@@ -71,7 +71,7 @@ graph TD
 ```
 
 - Entry is always the **Supervisor**.
-- The supervisor (a `gemini-1.5-flash` router with **structured output** `RouteResponse`) writes only `state["next"]` — it never adds messages.
+- The supervisor (a `gemini-flash-lite-latest` router with **structured output** `RouteResponse`) writes only `state["next"]` — it never adds messages.
 - A conditional edge routes on `state["next"]`: to a worker, or to `END` when `FINISH`.
 - **Every worker edges back to the supervisor**, so it re-decides after each step.
 - The loop is bounded by `settings.recursion_limit`, passed at invoke time (`{"recursion_limit": N}`).
@@ -118,7 +118,7 @@ Settings ─► build_dependencies(settings) ─► GraphDependencies ─► bui
                             (python main.py "…")                          (python serve.py → LangServe)
 ```
 
-- **CLI** (`main.py` → `cli.main`): one prompt in, final Markdown answer to stdout; diagnostics go through the logger.
+- **CLI** (`main.py` → `cli.main`): one prompt in, final Markdown answer to stdout — or to a file with `-o/--output PATH` (a `.md` extension is added if missing). The answer is taken from the last Writer-authored message; an empty answer is reported as an error rather than written. Diagnostics go through the logger.
 - **API** (`serve.py` → `api.create_app`): FastAPI with LangServe routes under `/research` (`/invoke`, `/batch`, `/playground`, …) and a `/` redirect to `/docs`.
 
 The root `main.py`/`serve.py` are thin launch shims that put `src/` on the path and call into `interfaces/`. See [development.md](development.md) for why they live at the root.

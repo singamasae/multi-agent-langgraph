@@ -2,7 +2,7 @@
 
 from typing import get_args
 
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 
 from app.agents.supervisor import RouteResponse, make_supervisor_node
 from app.constants import ROUTE_OPTIONS
@@ -18,8 +18,17 @@ def test_supervisor_node_returns_next_and_adds_no_messages():
     assert "messages" not in result
 
 
+def test_research_is_forced_first_regardless_of_llm_choice():
+    # No research yet: even if the LLM jumps to Writer/FINISH, route to Researcher
+    # so the Writer never runs on an empty context.
+    for llm_choice in ("Writer", "FINISH"):
+        node = make_supervisor_node(ScriptedSupervisor([llm_choice]))
+        result = node({"messages": [HumanMessage(content="q", name="User")], "next": ""})
+        assert result == {"next": "Researcher"}
+
+
 def test_premature_finish_is_redirected_to_writer():
-    # LLM says FINISH but the Writer has not produced the final answer yet.
+    # Research done, but LLM says FINISH before the Writer produced the answer.
     node = make_supervisor_node(ScriptedSupervisor(["FINISH"]))
 
     result = node(
@@ -29,11 +38,17 @@ def test_premature_finish_is_redirected_to_writer():
     assert result == {"next": "Writer"}
 
 
-def test_finish_is_allowed_once_the_writer_has_answered():
+def test_finish_is_allowed_after_research_and_writing():
     node = make_supervisor_node(ScriptedSupervisor(["FINISH"]))
 
     result = node(
-        {"messages": [AIMessage(content="final answer", name="Writer")], "next": ""}
+        {
+            "messages": [
+                AIMessage(content="facts", name="Researcher"),
+                AIMessage(content="final answer", name="Writer"),
+            ],
+            "next": "",
+        }
     )
 
     assert result == {"next": "FINISH"}

@@ -41,10 +41,25 @@ def make_researcher_node(agent: Runnable) -> Callable[[AgentState], dict]:
         logger.info("Researcher node running")
         result = agent.invoke({"messages": state["messages"]})
         last_message = result["messages"][-1]
+
+        text = str(last_message.text)
+        finish_reason = (getattr(last_message, "response_metadata", {}) or {}).get(
+            "finish_reason"
+        )
+        logger.debug(
+            "Researcher output: finish_reason=%s, content=%r",
+            finish_reason,
+            last_message.content,
+        )
+        if not text.strip():
+            logger.warning(
+                "Researcher produced no text (finish_reason=%s). Raw content=%r",
+                finish_reason,
+                last_message.content,
+            )
+
         return {
-            "messages": [
-                AIMessage(content=last_message.content, name=AgentName.RESEARCHER.value)
-            ]
+            "messages": [AIMessage(content=text, name=AgentName.RESEARCHER.value)]
         }
 
     return researcher_node
