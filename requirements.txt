@@ -1,0 +1,8 @@
+langchain>=0.2.0
+langchain-google-genai>=1.0.6
+langgraph>=0.1.19
+duckduckgo-search>=6.1.7
+python-dotenv>=1.0.1
+fastapi
+uvicorn
+langserve[all]
