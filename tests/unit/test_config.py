@@ -11,18 +11,30 @@ from pydantic import ValidationError
 from app.config import Settings, get_settings
 
 
-def test_defaults_match_the_original_hardcoded_values(monkeypatch):
+def test_defaults_are_applied(monkeypatch):
+    # With only the API key set, every other field must use its declared
+    # default (i.e. no stray environment variable leaked in). Asserting against
+    # the declared defaults keeps this test stable when a default is tuned.
     monkeypatch.setenv("GOOGLE_API_KEY", "real-key")
     settings = Settings(_env_file=None)
 
-    assert settings.supervisor_model == "gemini-1.5-flash"
-    assert settings.researcher_model == "gemini-1.5-flash"
-    assert settings.writer_model == "gemini-1.5-pro"
-    assert settings.writer_temperature == 0.7
-    assert settings.search_max_results == 3
-    assert settings.recursion_limit == 20
-    assert settings.api_host == "127.0.0.1"
-    assert settings.api_port == 8000
+    tunables = [
+        "supervisor_model",
+        "researcher_model",
+        "writer_model",
+        "supervisor_temperature",
+        "researcher_temperature",
+        "writer_temperature",
+        "thinking_budget",
+        "search_max_results",
+        "recursion_limit",
+        "api_host",
+        "api_port",
+        "log_level",
+        "log_format",
+    ]
+    for name in tunables:
+        assert getattr(settings, name) == Settings.model_fields[name].default
 
 
 def test_missing_api_key_fails_fast(monkeypatch):

@@ -15,14 +15,15 @@ The project follows **12-factor** config: every tunable comes from the environme
 | Variable | Default | Notes |
 |----------|---------|-------|
 | `GOOGLE_API_KEY` | *(required)* | Gemini API key. Stored as `SecretStr` (never logged). **Fail-fast**: missing or the `.env.example` placeholder raises at startup. |
-| `SUPERVISOR_MODEL` | `gemini-1.5-flash` | Router model. |
-| `RESEARCHER_MODEL` | `gemini-1.5-flash` | ReAct researcher model. |
-| `WRITER_MODEL` | `gemini-1.5-pro` | Writer model. |
+| `SUPERVISOR_MODEL` | `gemini-flash-lite-latest` | Router model. |
+| `RESEARCHER_MODEL` | `gemini-flash-lite-latest` | ReAct researcher model. |
+| `WRITER_MODEL` | `gemini-flash-lite-latest` | Writer model. |
 | `SUPERVISOR_TEMPERATURE` | `0.0` | |
 | `RESEARCHER_TEMPERATURE` | `0.0` | |
 | `WRITER_TEMPERATURE` | `0.7` | |
+| `THINKING_BUDGET` | `0` | Gemini "thinking" tokens. `0` disables thinking so the model returns answer text; thinking-enabled models (e.g. `*-flash-lite`) can otherwise return reasoning-only content with no answer. `-1` = model's dynamic default. |
 | `SEARCH_MAX_RESULTS` | `3` | DuckDuckGo result count. |
-| `RECURSION_LIMIT` | `20` | Safety bound on the supervisor/worker loop. |
+| `RECURSION_LIMIT` | `50` | Safety bound on the supervisor/worker loop. |
 | `API_HOST` | `127.0.0.1` | Server bind host. Use `0.0.0.0` in containers. |
 | `API_PORT` | `8000` | Server port. |
 | `LOG_LEVEL` | `INFO` | Standard logging level. |
@@ -35,7 +36,7 @@ The canonical, commented list is in [`../.env.example`](../.env.example). Option
 ```bash
 cp .env.example .env          # then set GOOGLE_API_KEY
 # override anything inline:
-WRITER_MODEL=gemini-1.5-flash SEARCH_MAX_RESULTS=1 LOG_FORMAT=json python main.py "…"
+WRITER_TEMPERATURE=0.3 SEARCH_MAX_RESULTS=1 LOG_FORMAT=json python main.py "…"
 ```
 
 ## Adding a new setting

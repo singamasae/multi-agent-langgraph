@@ -1,0 +1,26 @@
+# Keep the build context small and secrets/artifacts out of the image.
+
+# Secrets — NEVER bake real credentials into an image.
+.env
+
+# Virtualenv (huge, host-specific) and VCS metadata.
+venv/
+.venv/
+.git/
+.gitignore
+
+# Python caches / build artifacts.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+
+# IDE.
+.idea/
+.vscode/
+
+# Not needed at runtime.
+tests/
+docs/
+*.md

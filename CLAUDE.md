@@ -16,6 +16,7 @@ The full design blueprint lives in **[`docs/`](docs/README.md)** — read it bef
 - [`docs/configuration.md`](docs/configuration.md) — settings & environment variables
 - [`docs/testing.md`](docs/testing.md) — test strategy and how to run
 - [`docs/development.md`](docs/development.md) — workflow, invariants, adding an agent
+- [`docs/deployment.md`](docs/deployment.md) — Docker / docker-compose deployment
 
 ## Commands
 
@@ -64,7 +65,7 @@ main.py, serve.py     thin shims that add src/ to sys.path and call the interfac
 
 Dependency direction: `interfaces/` → `graph/` → `agents/` + `tools/`. `constants`/`config`/`llm`/`logging` are shared support the edges read.
 
-**Control flow.** `build_graph(deps)` compiles a `StateGraph`: `START → Supervisor`; the supervisor (`gemini-1.5-flash`, structured `RouteResponse`) writes `state["next"]`; conditional edges route to a worker or to `END` on `FINISH`; every worker edges back to the supervisor. The loop is bounded by `settings.recursion_limit`, passed at invoke time. Researcher is a `create_react_agent` with search; Writer is a toolless `gemini-1.5-pro` chain.
+**Control flow.** `build_graph(deps)` compiles a `StateGraph`: `START → Supervisor`; the supervisor (`gemini-flash-lite-latest`, structured `RouteResponse`) writes `state["next"]`; conditional edges route to a worker or to `END` on `FINISH`; every worker edges back to the supervisor. The loop is bounded by `settings.recursion_limit`, passed at invoke time. Researcher is a `create_react_agent` with search; Writer is a toolless chain. All model names are per-role settings (see [`docs/configuration.md`](docs/configuration.md)).
 
 **Dependency injection is the core seam.** Each agent module exposes a pure `build_*` factory (takes an injected model/tools, returns a runnable) and a `make_*_node` adapter (wraps it as a LangGraph node). `graph/dependencies.py::build_dependencies(settings)` is the *only* place real models/tools/agents are assembled into a `GraphDependencies`; `build_graph` consumes that dataclass. Tests inject a `GraphDependencies` full of fakes, so no test constructs a real model or hits the network.
 

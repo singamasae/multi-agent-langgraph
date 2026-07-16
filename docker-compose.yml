@@ -1,0 +1,25 @@
+# Deployment for the AaaS research API.
+#
+#   docker compose up --build         # build + run
+#   docker compose up -d              # detached
+#   docker compose logs -f api        # tail logs
+#   docker compose down               # stop
+#
+# GOOGLE_API_KEY must be provided (via the .env file below or the shell
+# environment); the service fails fast without it.
+
+services:
+  api:
+    build: .
+    image: aaas-mvp-api
+    ports:
+      - "${API_PORT:-8000}:8000"
+    # Loads GOOGLE_API_KEY and any optional overrides from .env at runtime.
+    # The file is NOT baked into the image (see .dockerignore).
+    env_file:
+      - .env
+    environment:
+      # Container must bind to all interfaces regardless of any host default.
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+    restart: unless-stopped

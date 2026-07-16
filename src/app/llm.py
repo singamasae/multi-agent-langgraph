@@ -39,4 +39,7 @@ def build_chat_model(role: str, settings: Settings) -> BaseChatModel:
         model=getattr(settings, model_attr),
         temperature=getattr(settings, temperature_attr),
         google_api_key=settings.google_api_key.get_secret_value(),
+        # Disable "thinking" by default so the model emits answer text rather
+        # than reasoning-only content (see Settings.thinking_budget).
+        thinking_budget=settings.thinking_budget,
     )

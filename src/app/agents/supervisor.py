@@ -8,17 +8,20 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import Runnable
 from pydantic import BaseModel
 
-from ..constants import MEMBERS, ROUTE_OPTIONS
+from ..constants import FINISH, MEMBERS, ROUTE_OPTIONS, AgentName
 from ..state import AgentState
 
 logger = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT = (
-    "You are a supervisor tasked with managing a conversation between the"
-    " following workers: {members}. Given the following user request,"
-    " respond with the worker to act next. Each worker will perform a"
-    " task and respond with their results and status. When finished,"
-    " respond with FINISH."
+    "You are a supervisor coordinating these workers: {members}.\n"
+    "- Researcher: searches the web and gathers factual information for the request.\n"
+    "- Writer: composes the final, well-structured answer for the user from the "
+    "research gathered so far.\n\n"
+    "Follow this workflow: first route to the Researcher to gather information, then "
+    "route to the Writer to compose the final answer. The Writer must always produce "
+    "the final answer before the task is complete. Respond with the single worker to "
+    "act next, or FINISH only after the Writer has delivered the final answer."
 )
 
 _ROUTING_QUESTION = (
@@ -50,15 +53,32 @@ def build_supervisor_runnable(llm: BaseChatModel) -> Runnable:
     return prompt | llm.with_structured_output(RouteResponse)
 
 
+def _has_writer_message(state: AgentState) -> bool:
+    """True if the Writer has already produced a message in the history."""
+    return any(
+        getattr(message, "name", None) == AgentName.WRITER.value
+        for message in state["messages"]
+    )
+
+
 def make_supervisor_node(supervisor: Runnable) -> Callable[[AgentState], dict]:
     """Adapt the supervisor runnable into a LangGraph node.
 
     Writes only ``next`` — the supervisor never adds messages to the history.
+    Enforces one invariant the LLM router cannot be trusted to keep: the Writer
+    must deliver the final answer before the graph finishes, so a premature
+    FINISH is redirected to the Writer.
     """
 
     def supervisor_node(state: AgentState) -> dict:
         decision = supervisor.invoke(state)
-        logger.info("Supervisor routing decision: next=%s", decision.next)
-        return {"next": decision.next}
+        next_node = decision.next
+
+        if next_node == FINISH and not _has_writer_message(state):
+            logger.info("Supervisor chose FINISH before the Writer ran; routing to Writer")
+            next_node = AgentName.WRITER.value
+
+        logger.info("Supervisor routing decision: next=%s", next_node)
+        return {"next": next_node}
 
     return supervisor_node

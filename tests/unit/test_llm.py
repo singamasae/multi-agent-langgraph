@@ -25,6 +25,8 @@ def test_build_chat_model_maps_role_to_settings(
     assert kwargs["temperature"] == getattr(settings, expected_temp_attr)
     # The secret is unwrapped exactly once, at construction.
     assert kwargs["google_api_key"] == settings.google_api_key.get_secret_value()
+    # Thinking budget is threaded through so answers aren't reasoning-only.
+    assert kwargs["thinking_budget"] == settings.thinking_budget
 
 
 def test_build_chat_model_rejects_unknown_role(mocker, settings):

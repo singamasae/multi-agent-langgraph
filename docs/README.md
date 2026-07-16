@@ -16,6 +16,7 @@ A supervisor/worker **multi-agent research-and-writing workflow** built on LangG
 | [configuration.md](configuration.md) | Know which settings exist, how they're read (12-factor), and how to override them. |
 | [testing.md](testing.md) | Understand the test strategy, what is mocked, and how to run tests. |
 | [development.md](development.md) | Follow the workflow, respect the invariants, or add a new agent. |
+| [deployment.md](deployment.md) | Build and run the containerised API (Docker / docker-compose). |
 
 ## The 30-second mental model
 
@@ -32,6 +33,9 @@ aaas_mvp/
 ├── CLAUDE.md                 # quick reference for agents (commands + rules)
 ├── main.py                   # CLI launch shim  -> app.interfaces.cli
 ├── serve.py                  # API launch shim  -> app.interfaces.api
+├── Dockerfile                # container image for the API (see deployment.md)
+├── docker-compose.yml        # run the API container
+├── .dockerignore             # keeps venv/.env/tests out of the image
 ├── requirements.txt          # runtime deps (pinned)
 ├── requirements-dev.txt      # test/lint/type-check deps
 ├── pytest.ini / mypy.ini     # tooling config

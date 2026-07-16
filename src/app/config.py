@@ -37,20 +37,26 @@ class Settings(BaseSettings):
     )
 
     # Per-role model selection.
-    supervisor_model: str = "gemini-1.5-flash"
-    researcher_model: str = "gemini-1.5-flash"
-    writer_model: str = "gemini-1.5-pro"
+    supervisor_model: str = "gemini-flash-lite-latest"
+    researcher_model: str = "gemini-flash-lite-latest"
+    writer_model: str = "gemini-flash-lite-latest"
 
     # Per-role sampling temperature.
     supervisor_temperature: float = 0.0
     researcher_temperature: float = 0.0
     writer_temperature: float = 0.7
 
+    # Gemini "thinking" budget (tokens). 0 disables thinking so the model
+    # returns a normal text answer; thinking-enabled models (e.g. *-flash-lite)
+    # can otherwise return reasoning-only content with no answer text. Use -1
+    # for the model's dynamic default if you want thinking on.
+    thinking_budget: int = 0
+
     # Researcher search width.
     search_max_results: int = 3
 
     # Safety bound on the supervisor/worker loop.
-    recursion_limit: int = 20
+    recursion_limit: int = 50
 
     # HTTP server bind address.
     api_host: str = "127.0.0.1"

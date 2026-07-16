@@ -2,6 +2,8 @@
 
 from typing import get_args
 
+from langchain_core.messages import AIMessage
+
 from app.agents.supervisor import RouteResponse, make_supervisor_node
 from app.constants import ROUTE_OPTIONS
 from tests.fakes import ScriptedSupervisor
@@ -14,6 +16,27 @@ def test_supervisor_node_returns_next_and_adds_no_messages():
 
     assert result == {"next": "Researcher"}
     assert "messages" not in result
+
+
+def test_premature_finish_is_redirected_to_writer():
+    # LLM says FINISH but the Writer has not produced the final answer yet.
+    node = make_supervisor_node(ScriptedSupervisor(["FINISH"]))
+
+    result = node(
+        {"messages": [AIMessage(content="facts", name="Researcher")], "next": ""}
+    )
+
+    assert result == {"next": "Writer"}
+
+
+def test_finish_is_allowed_once_the_writer_has_answered():
+    node = make_supervisor_node(ScriptedSupervisor(["FINISH"]))
+
+    result = node(
+        {"messages": [AIMessage(content="final answer", name="Writer")], "next": ""}
+    )
+
+    assert result == {"next": "FINISH"}
 
 
 def test_route_response_literal_matches_roster():
