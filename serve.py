@@ -1,44 +1,33 @@
+"""API server entry-point shim.
+
+The application factory lives in ``app.interfaces.api``; this file wires it to
+uvicorn using the configured host/port so ``python serve.py`` works from the
+repository root without installing the package.
+"""
+
 import os
-from fastapi import FastAPI
-from fastapi.responses import RedirectResponse
-from langserve import add_routes
-from dotenv import load_dotenv
+import sys
 
-# Import the LangGraph workflow we created
-from src.graph import create_graph
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
-# Load environment variables (like GOOGLE_API_KEY)
-load_dotenv()
+from pydantic import ValidationError  # noqa: E402
 
-# Initialize FastAPI application
-app = FastAPI(
-    title="AaaS Research API",
-    version="1.0",
-    description="A multi-agent research and writing API built with LangGraph and LangServe",
-)
-
-@app.get("/")
-async def redirect_root_to_docs():
-    # Redirect root to Swagger UI docs
-    return RedirectResponse("/docs")
-
-# Create the LangGraph agent
-agent_graph = create_graph()
-
-# Magic of LangServe: Add API routes and Playground automatically
-add_routes(
-    app,
-    agent_graph,
-    path="/research",
-)
+from app.config import get_settings  # noqa: E402
+from app.interfaces.api import create_app  # noqa: E402
 
 if __name__ == "__main__":
     import uvicorn
-    
-    # Check if API Key is configured before starting the server
-    if not os.getenv("GOOGLE_API_KEY") or os.getenv("GOOGLE_API_KEY") == "your_api_key_here":
-        print("Error: GOOGLE_API_KEY is not set. Please set it in the .env file.")
-    else:
-        print("Starting LangServe API at http://localhost:8000")
-        print("Access the interactive Playground at http://localhost:8000/research/playground")
-        uvicorn.run(app, host="localhost", port=8000)
+
+    try:
+        settings = get_settings()
+    except ValidationError as exc:
+        print(f"Configuration error: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    app = create_app(settings)
+    print(f"Starting LangServe API at http://{settings.api_host}:{settings.api_port}")
+    print(
+        "Interactive playground at "
+        f"http://{settings.api_host}:{settings.api_port}/research/playground"
+    )
+    uvicorn.run(app, host=settings.api_host, port=settings.api_port)
