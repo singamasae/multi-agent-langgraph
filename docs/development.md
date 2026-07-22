@@ -10,9 +10,10 @@
 
 ## Invariants (do not break)
 
-- Worker `AIMessage`s carry `name=` (`"Researcher"` / `"Writer"`) — routing and output depend on it.
+- Worker `AIMessage`s carry `name=` — each researcher specialist's name (e.g. `"TechnologyResearcher"`) or `"Writer"` — routing and output depend on it.
 - The researcher node surfaces only the ReAct agent's **last** message (intermediate tool chatter is dropped).
-- The roster lives once in `constants.AgentName`; `MEMBERS` / `ROUTE_OPTIONS` derive from it, and `test_supervisor` guards that `RouteResponse`'s `Literal` still agrees.
+- The roster lives once in `constants.AgentName` + the `RESEARCH_TOPICS` registry; `RESEARCHER_MEMBERS` / `MEMBERS` / `ROUTE_OPTIONS` / `DEFAULT_RESEARCHER` derive from them, and `test_supervisor` guards that `RouteResponse`'s `Literal` still agrees.
+- All topic specialists share one researcher model + search tool and differ only by their `build_topic_system_prompt` prompt.
 - Tests must never require a real key or network — mock at the `GraphDependencies` boundary.
 - Only `llm.py` constructs a provider LLM client (Gemini or OpenAI); only `graph/dependencies.py` assembles real agents/tools.
 
@@ -34,7 +35,22 @@ ruff check src tests main.py serve.py
 mypy src/app
 ```
 
-## Adding a new agent
+## Adding a new research topic
+
+A new topic specialist is even smaller — the six existing ones share one
+implementation:
+
+1. Add the enum member to `constants.AgentName` and a matching `RESEARCH_TOPICS`
+   entry (its focus description). `RESEARCHER_MEMBERS` / `MEMBERS` / `ROUTE_OPTIONS`
+   update automatically.
+2. Extend `RouteResponse`'s `Literal` in `agents/supervisor.py` to include the new
+   name (kept in order with `ROUTE_OPTIONS`; `test_supervisor` verifies this).
+
+`build_dependencies` builds the new specialist from the registry and `build_graph`
+adds its node + return edge automatically — no other code changes. Update
+`test_constants` / `test_graph_builder` expectations.
+
+## Adding a new (non-researcher) agent
 
 The roster is centralised, so a new worker is a small, well-defined change:
 

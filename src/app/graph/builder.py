@@ -27,7 +27,8 @@ def build_graph(deps: GraphDependencies) -> CompiledStateGraph:
     # add_node's overloads don't infer a plain (state) -> dict node callable,
     # so these are annotated for the reader and silenced for the type checker.
     workflow.add_node(SUPERVISOR, make_supervisor_node(deps.supervisor))  # type: ignore[call-overload]
-    workflow.add_node(AgentName.RESEARCHER.value, make_researcher_node(deps.researcher_agent))  # type: ignore[call-overload]
+    for name, agent in deps.researchers.items():
+        workflow.add_node(name, make_researcher_node(agent, name))  # type: ignore[call-overload]
     workflow.add_node(AgentName.WRITER.value, make_writer_node(deps.writer_agent))  # type: ignore[call-overload]
 
     # Workers always return control to the supervisor.

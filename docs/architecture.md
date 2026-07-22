@@ -27,16 +27,16 @@ Dependencies point **downward only**. `agents/`, `tools/`, and `graph/` never im
 
 | Module | Responsibility |
 |--------|----------------|
-| `constants.py` | `AgentName` enum — **single source of truth** for the worker roster; derives `MEMBERS` and `ROUTE_OPTIONS`. |
+| `constants.py` | `AgentName` enum + `RESEARCH_TOPICS` registry — **single source of truth** for the worker roster (six topic-specialist researchers + the writer); derives `RESEARCHER_MEMBERS`, `DEFAULT_RESEARCHER`, `MEMBERS`, `ROUTE_OPTIONS`. |
 | `config.py` | `Settings` (pydantic-settings) + cached `get_settings()`. All configuration. |
 | `llm.py` | `build_chat_model(role, settings)` — the **only** place a provider LLM client is constructed; dispatches per role to Gemini (`ChatGoogleGenerativeAI`) or OpenAI (`ChatOpenAI`). |
 | `logging_config.py` | `configure_logging(settings)` — text or JSON; called once per interface. |
 | `state.py` | `AgentState` TypedDict; the `messages` reducer is `add_messages` (append, HTTP-safe deserialization). |
 | `tools/search.py` | `build_search_tool(settings)` — DuckDuckGo results tool. |
-| `agents/supervisor.py` | Router: `RouteResponse` schema, `build_supervisor_runnable`, `make_supervisor_node`. |
-| `agents/researcher.py` | ReAct agent with search: `build_researcher_agent`, `make_researcher_node`. |
+| `agents/supervisor.py` | Router: `RouteResponse` schema, `build_supervisor_runnable`, `make_supervisor_node`. Its prompt lists each topic specialist (from `RESEARCH_TOPICS`) so it can classify the request. |
+| `agents/researcher.py` | One ReAct-with-search implementation shared by every topic specialist: `build_researcher_agent(llm, tools, prompt=…)`, `build_topic_system_prompt(topic)`, `make_researcher_node(agent, name)`. |
 | `agents/writer.py` | Toolless synthesis chain: `build_writer_agent`, `make_writer_node`. |
-| `graph/dependencies.py` | `GraphDependencies` dataclass + `build_dependencies(settings)` — the **composition root**. |
+| `graph/dependencies.py` | `GraphDependencies` dataclass (`researchers: dict[str, Runnable]`) + `build_dependencies(settings)` — the **composition root**; builds one specialist per `RESEARCH_TOPICS` entry, all sharing one researcher model + search tool. |
 | `graph/builder.py` | `build_graph(deps)` — wires nodes and edges, compiles the `StateGraph`. |
 | `interfaces/cli.py` | `main(argv)` — argparse, fail-fast, prints the final answer. |
 | `interfaces/api.py` | `create_app(settings)` — FastAPI + LangServe routes at `/research`. |
@@ -50,8 +50,8 @@ Each agent module splits into two functions:
 
 ```
 build_chat_model(role, settings) ─┐
-                                  ├─► build_researcher_agent(llm, tools) ─► make_researcher_node(agent) ─► graph node
-build_search_tool(settings) ──────┘
+                                  ├─► build_researcher_agent(llm, tools, prompt) ─► make_researcher_node(agent, name) ─► graph node
+build_search_tool(settings) ──────┘   (one per topic; prompt from build_topic_system_prompt)
 ```
 
 This split is the seam that lets tests inject a fake runnable in place of a real model.
@@ -63,7 +63,7 @@ This split is the seam that lets tests inject a fake runnable in place of a real
 ```mermaid
 graph TD
     START([START]) --> SUP[Supervisor]
-    SUP -->|next = Researcher| RES[Researcher]
+    SUP -->|next = one topic specialist| RES["Researcher specialists<br/>(Science, Food &amp; Beverage,<br/>Technology, Automotive,<br/>Art &amp; Culture, Environment/Social)"]
     SUP -->|next = Writer| WRI[Writer]
     SUP -->|next = FINISH| END([END])
     RES --> SUP
@@ -71,9 +71,10 @@ graph TD
 ```
 
 - Entry is always the **Supervisor**.
-- The supervisor (a router with **structured output** `RouteResponse`, by default `gemini-flash-lite-latest` but configurable per `SUPERVISOR_PROVIDER` / `SUPERVISOR_MODEL`) writes only `state["next"]` — it never adds messages.
-- A conditional edge routes on `state["next"]`: to a worker, or to `END` when `FINISH`.
-- **Every worker edges back to the supervisor**, so it re-decides after each step.
+- The supervisor (a router with **structured output** `RouteResponse`, by default `gemini-flash-lite-latest` but configurable per `SUPERVISOR_PROVIDER` / `SUPERVISOR_MODEL`) **analyses the request and picks the best-fit topic specialist**, writing only `state["next"]` — it never adds messages.
+- A conditional edge routes on `state["next"]`: to a worker (one of the six specialists or the Writer), or to `END` when `FINISH`.
+- **Every worker edges back to the supervisor**, so it re-decides after each step — for a cross-domain request it can consult several specialists before the Writer runs.
+- Deterministic guardrails in the node: research must happen before the Writer, so if the router tries to skip straight to the Writer/`FINISH` with no research yet it is overridden to `DEFAULT_RESEARCHER`; a premature `FINISH` before the Writer has answered is redirected to the Writer.
 - The loop is bounded by `settings.recursion_limit`, passed at invoke time (`{"recursion_limit": N}`).
 
 A typical run:
@@ -85,9 +86,9 @@ sequenceDiagram
     participant R as Researcher
     participant W as Writer
     U->>S: prompt
-    S->>R: next = Researcher
+    S->>R: next = best-fit specialist (e.g. TechnologyResearcher)
     R->>R: web search (ReAct loop)
-    R-->>S: AIMessage(name="Researcher") — final summary only
+    R-->>S: AIMessage(name="TechnologyResearcher") — final summary only
     S->>W: next = Writer
     W-->>S: AIMessage(name="Writer") — Markdown answer
     S->>U: next = FINISH → END
@@ -102,7 +103,7 @@ sequenceDiagram
 
 Message conventions that the routing and output depend on:
 
-- Worker messages are tagged with `name=` (`"Researcher"` / `"Writer"`).
+- Worker messages are tagged with `name=` — each specialist's name (e.g. `"TechnologyResearcher"`) or `"Writer"`. The supervisor's "has research happened yet?" check keys off the specialist names.
 - The researcher node surfaces **only the ReAct agent's last message** — intermediate tool-call chatter is intentionally dropped from shared history.
 
 ## Two interfaces, one graph

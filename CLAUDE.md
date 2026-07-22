@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-`aaas_mvp` ("Agent-as-a-Service" MVP) is a supervisor/worker multi-agent research-and-writing workflow built on LangGraph, with pluggable LLM providers (Google Gemini and OpenAI, selectable per role) and DuckDuckGo web search. It runs as either a one-shot CLI or a LangServe REST API, over a single shared graph.
+`aaas_mvp` ("Agent-as-a-Service" MVP) is a supervisor/worker multi-agent research-and-writing workflow built on LangGraph, with pluggable LLM providers (Google Gemini and OpenAI, selectable per role) and DuckDuckGo web search. The research roster is a set of **topic specialists** (Science, Food & Beverage, Technology, Automotive, Art & Culture, Environment/Social); the supervisor analyses the prompt and routes to the best-fit specialist(s) before the Writer composes the answer. It runs as either a one-shot CLI or a LangServe REST API, over a single shared graph.
 
 The codebase follows a clean-architecture layering with dependency injection, 12-factor configuration, and a test suite that runs fully offline.
 
@@ -51,7 +51,7 @@ Layered so that domain logic never touches external SDKs directly and the whole 
 
 ```
 src/app/
-  constants.py        AgentName enum — single source of truth for the roster
+  constants.py        AgentName enum + RESEARCH_TOPICS registry — single source of truth for the roster (6 topic researchers + writer)
   config.py           Settings (pydantic-settings) + get_settings()
   llm.py              build_chat_model(role, settings) — ONLY place a provider LLM client is built; dispatches per role to Gemini or OpenAI
   logging_config.py   configure_logging(settings)
@@ -65,7 +65,7 @@ main.py, serve.py     thin shims that add src/ to sys.path and call the interfac
 
 Dependency direction: `interfaces/` → `graph/` → `agents/` + `tools/`. `constants`/`config`/`llm`/`logging` are shared support the edges read.
 
-**Control flow.** `build_graph(deps)` compiles a `StateGraph`: `START → Supervisor`; the supervisor (structured `RouteResponse`; default `gemini-flash-lite-latest`) writes `state["next"]`; conditional edges route to a worker or to `END` on `FINISH`; every worker edges back to the supervisor. The loop is bounded by `settings.recursion_limit`, passed at invoke time. Researcher is a `create_react_agent` with search; Writer is a toolless chain. Provider and model are per-role settings (`*_PROVIDER` + `*_MODEL`; see [`docs/configuration.md`](docs/configuration.md)).
+**Control flow.** `build_graph(deps)` compiles a `StateGraph`: `START → Supervisor`; the supervisor (structured `RouteResponse`; default `gemini-flash-lite-latest`) analyses the prompt and writes the best-fit specialist into `state["next"]`; conditional edges route to a worker or to `END` on `FINISH`; every worker edges back to the supervisor (so a cross-domain request can visit several specialists before the Writer). Deterministic guardrails: research must precede the Writer (a skip is overridden to `DEFAULT_RESEARCHER`), and a premature `FINISH` is redirected to the Writer. The loop is bounded by `settings.recursion_limit`, passed at invoke time. The six topic researchers share **one** `create_react_agent`-with-search implementation, differing only by a `build_topic_system_prompt` prompt; Writer is a toolless chain. Provider and model are per-role settings (`*_PROVIDER` + `*_MODEL`; the researcher settings drive all specialists — see [`docs/configuration.md`](docs/configuration.md)).
 
 **Dependency injection is the core seam.** Each agent module exposes a pure `build_*` factory (takes an injected model/tools, returns a runnable) and a `make_*_node` adapter (wraps it as a LangGraph node). `graph/dependencies.py::build_dependencies(settings)` is the *only* place real models/tools/agents are assembled into a `GraphDependencies`; `build_graph` consumes that dataclass. Tests inject a `GraphDependencies` full of fakes, so no test constructs a real model or hits the network.
 
@@ -84,12 +84,19 @@ All tunables live in `Settings` (`config.py`) and come from the environment (no 
 ## Invariants (do not break)
 
 - **Never read, open, print, cat, log, or otherwise expose the contents of `.env`** (or any real secret value). `.env` holds live credentials. To learn what config exists, read `.env.example` (which contains only placeholders) — never the real `.env`. Do not echo secret values into terminal output, code, commits, test fixtures, or chat, even when debugging. `GOOGLE_API_KEY` and `OPENAI_API_KEY` are `SecretStr` precisely so they stay out of logs and reprs; keep it that way.
-- Worker `AIMessage`s carry `name=` (`"Researcher"`/`"Writer"`) — routing and output depend on it.
+- Worker `AIMessage`s carry `name=` — a specialist's name (e.g. `"TechnologyResearcher"`) or `"Writer"` — routing and output depend on it; the supervisor's "has research happened?" check keys off the specialist names.
 - The researcher node surfaces only the react agent's **last** message (intermediate tool chatter is dropped).
-- The roster lives once in `constants.AgentName`; `MEMBERS`/`ROUTE_OPTIONS` derive from it, and `test_supervisor` guards that `RouteResponse`'s `Literal` still agrees.
+- The roster lives once in `constants.AgentName` + the `RESEARCH_TOPICS` registry; `RESEARCHER_MEMBERS`/`MEMBERS`/`ROUTE_OPTIONS`/`DEFAULT_RESEARCHER` derive from them, and `test_supervisor` guards that `RouteResponse`'s `Literal` still agrees.
 - Tests must never require a real key or network — mock at the `GraphDependencies` boundary.
 
-### Adding a new agent
+### Adding a new research topic
+
+1. Add the enum member to `constants.AgentName` + a `RESEARCH_TOPICS` entry (focus description).
+2. Extend `RouteResponse`'s `Literal` in `agents/supervisor.py` (keep it in `ROUTE_OPTIONS` order).
+
+`build_dependencies` builds the specialist from the registry and `build_graph` adds its node + return edge automatically — no other code changes.
+
+### Adding a new (non-researcher) agent
 
 1. Add the name to `constants.AgentName` and extend `RouteResponse`'s `Literal` in `agents/supervisor.py`.
 2. Create `agents/<name>.py` with `build_<name>_*` + `make_<name>_node` returning `{"messages": [AIMessage(..., name="<Name>")]}`.

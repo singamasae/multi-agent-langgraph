@@ -15,9 +15,10 @@ logger = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT = (
     "You are an expert technical writer. Write a comprehensive, well-structured, "
-    "and engaging response based ONLY on the research provided by the Researcher. "
-    "Do not add made-up facts or hallucinate. Format your output in clean Markdown. "
-    "If there is no research provided, ask the Researcher to provide information."
+    "and engaging response based ONLY on the research provided by the "
+    "researchers. Do not add made-up facts or hallucinate. Format your output in "
+    "clean Markdown. If there is no research provided, ask for research to be "
+    "gathered first."
 )
 
 # Trailing human turn. Without it the message history ends with the Researcher's

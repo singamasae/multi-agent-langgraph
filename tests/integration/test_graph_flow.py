@@ -10,7 +10,7 @@ from app.graph.builder import build_graph
 def test_full_route_researcher_then_writer_then_finish(fake_deps):
     graph = build_graph(
         fake_deps(
-            route_sequence=("Researcher", "Writer", "FINISH"),
+            route_sequence=("TechnologyResearcher", "Writer", "FINISH"),
             writer_content="# Final answer",
         )
     )
@@ -21,14 +21,14 @@ def test_full_route_researcher_then_writer_then_finish(fake_deps):
     )
 
     names = [getattr(m, "name", None) for m in final_state["messages"]]
-    # The human prompt, then a Researcher message, then the Writer's answer.
-    assert "Researcher" in names
+    # The human prompt, then a specialist message, then the Writer's answer.
+    assert "TechnologyResearcher" in names
     assert names[-1] == "Writer"
     assert final_state["messages"][-1].content == "# Final answer"
 
 
 def test_supervisor_that_never_finishes_trips_the_recursion_cap(fake_deps):
-    graph = build_graph(fake_deps(route_sequence=("Researcher",) * 100))
+    graph = build_graph(fake_deps(route_sequence=("ScienceResearcher",) * 100))
 
     with pytest.raises(GraphRecursionError):
         graph.invoke(

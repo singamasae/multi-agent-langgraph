@@ -18,10 +18,10 @@ The project follows **12-factor** config: every tunable comes from the environme
 | `OPENAI_API_KEY` | *(required if any role uses `openai`)* | OpenAI API key. Stored as `SecretStr`. Fail-fast when a role targets `openai`. |
 | `OPENAI_BASE_URL` | *(unset)* | Optional override for OpenAI-compatible endpoints (Azure, proxies, local servers). |
 | `SUPERVISOR_PROVIDER` | `google` | Router provider: `google` or `openai`. |
-| `RESEARCHER_PROVIDER` | `google` | ReAct researcher provider: `google` or `openai`. |
+| `RESEARCHER_PROVIDER` | `google` | ReAct researcher provider: `google` or `openai`. Applies to **all six** topic specialists — they share one researcher model + search tool and differ only by prompt. |
 | `WRITER_PROVIDER` | `google` | Writer provider: `google` or `openai`. |
 | `SUPERVISOR_MODEL` | `gemini-flash-lite-latest` | Router model. Set to an OpenAI model (e.g. `gpt-4o-mini`) when its provider is `openai`. |
-| `RESEARCHER_MODEL` | `gemini-flash-lite-latest` | ReAct researcher model. |
+| `RESEARCHER_MODEL` | `gemini-flash-lite-latest` | ReAct researcher model, shared by every topic specialist. |
 | `WRITER_MODEL` | `gemini-flash-lite-latest` | Writer model. |
 | `SUPERVISOR_TEMPERATURE` | `0.0` | |
 | `RESEARCHER_TEMPERATURE` | `0.0` | |

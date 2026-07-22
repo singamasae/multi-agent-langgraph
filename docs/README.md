@@ -6,7 +6,7 @@ This folder is the **blueprint** for `aaas_mvp`. Read it before making changes; 
 
 ## What this project is
 
-A supervisor/worker **multi-agent research-and-writing workflow** built on LangGraph, with pluggable LLM providers (**Google Gemini** and **OpenAI**, selectable per role) and DuckDuckGo web search. A user gives a prompt; a supervisor routes between a **Researcher** (searches the web) and a **Writer** (synthesises a Markdown answer) until the work is done. It ships as both a one-shot **CLI** and a **LangServe HTTP API** over one shared graph.
+A supervisor/worker **multi-agent research-and-writing workflow** built on LangGraph, with pluggable LLM providers (**Google Gemini** and **OpenAI**, selectable per role) and DuckDuckGo web search. A user gives a prompt; a supervisor analyses it and routes to the best-fit **topic-specialist researcher** (Science, Food & Beverage, Technology, Automotive, Art & Culture, Environment/Social — each searches the web) then to a **Writer** (synthesises a Markdown answer) until the work is done. It ships as both a one-shot **CLI** and a **LangServe HTTP API** over one shared graph.
 
 ## Documentation index
 
@@ -23,7 +23,7 @@ A supervisor/worker **multi-agent research-and-writing workflow** built on LangG
 - **One package, layered:** `src/app/` with `interfaces → graph → agents/tools`, plus cross-cutting support (`config`, `constants`, `llm`, `logging`, `state`).
 - **Dependency injection is the spine.** Real models/tools/agents are assembled in exactly one place (`graph/dependencies.py`) and injected into the graph. Everything else receives its collaborators — so the whole graph is testable with fakes and **no test needs an API key or network**.
 - **Config is 12-factor.** Every tunable lives in `Settings` (`config.py`) and comes from the environment. Nothing is hardcoded; nothing constructs a provider LLM client (Gemini or OpenAI) except `llm.py`.
-- **The roster has one source of truth:** `constants.AgentName`.
+- **The roster has one source of truth:** `constants.AgentName` + the `RESEARCH_TOPICS` registry.
 
 ## Repository layout
 

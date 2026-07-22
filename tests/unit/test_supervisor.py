@@ -5,26 +5,35 @@ from typing import get_args
 from langchain_core.messages import AIMessage, HumanMessage
 
 from app.agents.supervisor import RouteResponse, make_supervisor_node
-from app.constants import ROUTE_OPTIONS
+from app.constants import DEFAULT_RESEARCHER, ROUTE_OPTIONS
 from tests.fakes import ScriptedSupervisor
 
 
 def test_supervisor_node_returns_next_and_adds_no_messages():
-    node = make_supervisor_node(ScriptedSupervisor(["Researcher"]))
+    node = make_supervisor_node(ScriptedSupervisor(["ScienceResearcher"]))
 
     result = node({"messages": [], "next": ""})
 
-    assert result == {"next": "Researcher"}
+    assert result == {"next": "ScienceResearcher"}
     assert "messages" not in result
 
 
-def test_research_is_forced_first_regardless_of_llm_choice():
-    # No research yet: even if the LLM jumps to Writer/FINISH, route to Researcher
-    # so the Writer never runs on an empty context.
+def test_specialist_choice_is_honoured_when_no_research_yet():
+    # No research yet, but the router picked a specialist: honour the topic.
+    node = make_supervisor_node(ScriptedSupervisor(["TechnologyResearcher"]))
+    result = node(
+        {"messages": [HumanMessage(content="q", name="User")], "next": ""}
+    )
+    assert result == {"next": "TechnologyResearcher"}
+
+
+def test_skipping_research_falls_back_to_default_specialist():
+    # No research yet: if the router jumps to Writer/FINISH, force the default
+    # specialist so the Writer never runs on an empty context.
     for llm_choice in ("Writer", "FINISH"):
         node = make_supervisor_node(ScriptedSupervisor([llm_choice]))
         result = node({"messages": [HumanMessage(content="q", name="User")], "next": ""})
-        assert result == {"next": "Researcher"}
+        assert result == {"next": DEFAULT_RESEARCHER}
 
 
 def test_premature_finish_is_redirected_to_writer():
@@ -32,7 +41,7 @@ def test_premature_finish_is_redirected_to_writer():
     node = make_supervisor_node(ScriptedSupervisor(["FINISH"]))
 
     result = node(
-        {"messages": [AIMessage(content="facts", name="Researcher")], "next": ""}
+        {"messages": [AIMessage(content="facts", name="ScienceResearcher")], "next": ""}
     )
 
     assert result == {"next": "Writer"}
@@ -44,7 +53,7 @@ def test_finish_is_allowed_after_research_and_writing():
     result = node(
         {
             "messages": [
-                AIMessage(content="facts", name="Researcher"),
+                AIMessage(content="facts", name="ScienceResearcher"),
                 AIMessage(content="final answer", name="Writer"),
             ],
             "next": "",

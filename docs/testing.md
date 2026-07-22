@@ -7,7 +7,7 @@ The suite is **fully offline** — it requires no `GOOGLE_API_KEY` and makes no 
 ```bash
 pip install -r requirements.txt -r requirements-dev.txt
 
-pytest -q                                        # full suite (43 tests)
+pytest -q                                        # full suite (47 tests)
 pytest tests/unit/test_supervisor.py -q          # one file
 pytest tests/unit/test_config.py::test_missing_api_key_fails_fast   # one test
 
@@ -41,17 +41,17 @@ tests/
 ├── conftest.py                 # fixtures (settings, fake_deps)
 ├── fakes.py                    # test doubles
 ├── unit/
-│   ├── test_constants.py       # roster SSOT; RouteResponse Literal matches ROUTE_OPTIONS
+│   ├── test_constants.py       # roster SSOT: topic registry, MEMBERS/RESEARCHER_MEMBERS, DEFAULT_RESEARCHER
 │   ├── test_config.py          # per-provider fail-fast, provider validation, env overrides, SecretStr masking, caching
 │   ├── test_state.py           # messages reducer appends
 │   ├── test_llm.py             # role → (provider, model, temperature) mapping; Gemini/OpenAI dispatch; unknown role rejected
 │   ├── test_search_tool.py     # configured max_results (no network)
-│   ├── test_supervisor.py      # node returns {"next": …}, adds no messages
-│   ├── test_researcher.py      # emits only last message, tagged name="Researcher"
+│   ├── test_supervisor.py      # routing: specialist honoured, default-topic fallback, premature-FINISH guard; RouteResponse Literal matches ROUTE_OPTIONS
+│   ├── test_researcher.py      # emits only last message, tagged with the specialist name; topic prompt embeds the focus
 │   ├── test_writer.py          # tags name="Writer"; real build path via fake chat model
-│   └── test_graph_builder.py   # composition-root wiring + graph topology
+│   └── test_graph_builder.py   # composition-root wiring (one agent per topic) + graph topology (all specialist nodes/edges)
 └── integration/
-    ├── test_graph_flow.py      # full compiled graph: routes Researcher→Writer→FINISH; recursion cap trips
+    ├── test_graph_flow.py      # full compiled graph: routes specialist→Writer→FINISH; recursion cap trips
     ├── test_cli.py             # main() prints answer / fails fast on config error
     └── test_api.py             # FastAPI TestClient: / redirect + POST /research/invoke
 ```

@@ -10,9 +10,9 @@ from app.interfaces.cli import _final_answer_text, main
 def test_final_answer_prefers_last_writer_message():
     messages = [
         HumanMessage(content="q", name="User"),
-        AIMessage(content="research", name="Researcher"),
+        AIMessage(content="research", name="ScienceResearcher"),
         AIMessage(content="the answer", name="Writer"),
-        AIMessage(content="more research", name="Researcher"),  # routed after Writer
+        AIMessage(content="more research", name="ScienceResearcher"),  # routed after Writer
     ]
     # Must return the Writer's answer, not the trailing Researcher message.
     assert _final_answer_text(messages) == "the answer"

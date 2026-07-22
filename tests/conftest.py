@@ -25,10 +25,11 @@ def fake_deps():
     Call with a routing script and canned agent outputs to drive an exact path
     through the compiled graph without any real model or network access.
     """
+    from app.constants import RESEARCHER_MEMBERS
     from app.graph.dependencies import GraphDependencies
 
     def _build(
-        route_sequence=("Researcher", "Writer", "FINISH"),
+        route_sequence=("ScienceResearcher", "Writer", "FINISH"),
         researcher_messages=None,
         writer_content="Final written answer.",
     ) -> GraphDependencies:
@@ -39,9 +40,14 @@ def fake_deps():
                 AIMessage(content="intermediate tool chatter"),
                 AIMessage(content="- fact one\n- fact two"),
             ]
+        # Every topic specialist gets its own fake ReAct agent; they all return
+        # the same canned research so tests can drive an exact routing path.
+        researchers = {
+            name: FakeReactAgent(researcher_messages) for name in RESEARCHER_MEMBERS
+        }
         return GraphDependencies(
             supervisor=ScriptedSupervisor(route_sequence),
-            researcher_agent=FakeReactAgent(researcher_messages),
+            researchers=researchers,
             writer_agent=FakeWriterAgent(writer_content),
         )
 
