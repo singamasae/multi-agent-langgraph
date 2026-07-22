@@ -55,7 +55,7 @@ src/app/
   config.py           Settings (pydantic-settings) + get_settings()
   llm.py              build_chat_model(role, settings) — ONLY place a Gemini client is constructed
   logging_config.py   configure_logging(settings)
-  state.py            AgentState (typing_extensions.TypedDict; messages reducer = operator.add)
+  state.py            AgentState (typing_extensions.TypedDict; messages reducer = add_messages)
   tools/search.py     build_search_tool(settings)
   agents/             supervisor / researcher / writer
   graph/              dependencies.py (composition root) + builder.py (topology)

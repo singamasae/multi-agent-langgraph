@@ -31,7 +31,7 @@ Dependencies point **downward only**. `agents/`, `tools/`, and `graph/` never im
 | `config.py` | `Settings` (pydantic-settings) + cached `get_settings()`. All configuration. |
 | `llm.py` | `build_chat_model(role, settings)` — the **only** place a Gemini client is constructed. |
 | `logging_config.py` | `configure_logging(settings)` — text or JSON; called once per interface. |
-| `state.py` | `AgentState` TypedDict; the `messages` reducer is `operator.add` (append). |
+| `state.py` | `AgentState` TypedDict; the `messages` reducer is `add_messages` (append, HTTP-safe deserialization). |
 | `tools/search.py` | `build_search_tool(settings)` — DuckDuckGo results tool. |
 | `agents/supervisor.py` | Router: `RouteResponse` schema, `build_supervisor_runnable`, `make_supervisor_node`. |
 | `agents/researcher.py` | ReAct agent with search: `build_researcher_agent`, `make_researcher_node`. |
@@ -97,7 +97,7 @@ sequenceDiagram
 
 `AgentState` has two keys:
 
-- `messages: Annotated[Sequence[BaseMessage], operator.add]` — the reducer **appends**, so every node returns `{"messages": [msg]}` (a list) to add to history rather than replace it.
+- `messages: Annotated[Sequence[AnyMessage], add_messages]` — the reducer **appends**, so every node returns `{"messages": [msg]}` (a list) to add to history rather than replace it. `AnyMessage` (from `langchain_core.messages`, a discriminated union over the concrete message subclasses keyed on `type`) plus `add_messages` (from `langgraph.graph.message`, the same pairing LangGraph's own `MessagesState` uses) are both required for LangServe's auto-derived Pydantic schema to resolve a JSON message like `{"type": "human", ...}` into a real `HumanMessage` — the generic `BaseMessage` type has no discriminator, so it deserializes JSON messages into a bare `BaseMessage` instance that the Gemini client rejects.
 - `next: str` — the supervisor's routing decision.
 
 Message conventions that the routing and output depend on:

@@ -58,7 +58,7 @@ tests/
 
 ## Highest-value tests
 
-- **`test_graph_flow.py`** exercises the entire wiring — conditional edges, worker→supervisor return edges, the `operator.add` reducer, and recursion termination — in one offline run with a scripted supervisor.
+- **`test_graph_flow.py`** exercises the entire wiring — conditional edges, worker→supervisor return edges, the `add_messages` reducer, and recursion termination — in one offline run with a scripted supervisor.
 - **`test_api.py`** exercises the real LangServe schema generation (this is the test that caught the `typing_extensions.TypedDict` requirement on Python < 3.12).
 
 ## Writing new tests
