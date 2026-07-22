@@ -16,12 +16,12 @@ interfaces/   delivery mechanisms (CLI, HTTP API) — own all I/O
 graph/        domain wiring: assemble + compile the workflow
     │
     ▼
-agents/  tools/   adapters to the outside world (Gemini, DuckDuckGo)
+agents/  tools/   adapters to the outside world (Gemini / OpenAI, DuckDuckGo)
 
 constants/ config/ llm/ logging/ state   ← cross-cutting support any layer may read
 ```
 
-Dependencies point **downward only**. `agents/`, `tools/`, and `graph/` never import `ChatGoogleGenerativeAI` or read `get_settings()` themselves — they receive already-built runnables and concrete values. This is what keeps the domain pure and the graph testable.
+Dependencies point **downward only**. `agents/`, `tools/`, and `graph/` never import `ChatGoogleGenerativeAI` / `ChatOpenAI` or read `get_settings()` themselves — they receive already-built runnables and concrete values. This is what keeps the domain pure and the graph testable.
 
 ## Package map (`src/app/`)
 
@@ -29,7 +29,7 @@ Dependencies point **downward only**. `agents/`, `tools/`, and `graph/` never im
 |--------|----------------|
 | `constants.py` | `AgentName` enum — **single source of truth** for the worker roster; derives `MEMBERS` and `ROUTE_OPTIONS`. |
 | `config.py` | `Settings` (pydantic-settings) + cached `get_settings()`. All configuration. |
-| `llm.py` | `build_chat_model(role, settings)` — the **only** place a Gemini client is constructed. |
+| `llm.py` | `build_chat_model(role, settings)` — the **only** place a provider LLM client is constructed; dispatches per role to Gemini (`ChatGoogleGenerativeAI`) or OpenAI (`ChatOpenAI`). |
 | `logging_config.py` | `configure_logging(settings)` — text or JSON; called once per interface. |
 | `state.py` | `AgentState` TypedDict; the `messages` reducer is `add_messages` (append, HTTP-safe deserialization). |
 | `tools/search.py` | `build_search_tool(settings)` — DuckDuckGo results tool. |
@@ -71,7 +71,7 @@ graph TD
 ```
 
 - Entry is always the **Supervisor**.
-- The supervisor (a `gemini-flash-lite-latest` router with **structured output** `RouteResponse`) writes only `state["next"]` — it never adds messages.
+- The supervisor (a router with **structured output** `RouteResponse`, by default `gemini-flash-lite-latest` but configurable per `SUPERVISOR_PROVIDER` / `SUPERVISOR_MODEL`) writes only `state["next"]` — it never adds messages.
 - A conditional edge routes on `state["next"]`: to a worker, or to `END` when `FINISH`.
 - **Every worker edges back to the supervisor**, so it re-decides after each step.
 - The loop is bounded by `settings.recursion_limit`, passed at invoke time (`{"recursion_limit": N}`).
@@ -97,7 +97,7 @@ sequenceDiagram
 
 `AgentState` has two keys:
 
-- `messages: Annotated[Sequence[AnyMessage], add_messages]` — the reducer **appends**, so every node returns `{"messages": [msg]}` (a list) to add to history rather than replace it. `AnyMessage` (from `langchain_core.messages`, a discriminated union over the concrete message subclasses keyed on `type`) plus `add_messages` (from `langgraph.graph.message`, the same pairing LangGraph's own `MessagesState` uses) are both required for LangServe's auto-derived Pydantic schema to resolve a JSON message like `{"type": "human", ...}` into a real `HumanMessage` — the generic `BaseMessage` type has no discriminator, so it deserializes JSON messages into a bare `BaseMessage` instance that the Gemini client rejects.
+- `messages: Annotated[Sequence[AnyMessage], add_messages]` — the reducer **appends**, so every node returns `{"messages": [msg]}` (a list) to add to history rather than replace it. `AnyMessage` (from `langchain_core.messages`, a discriminated union over the concrete message subclasses keyed on `type`) plus `add_messages` (from `langgraph.graph.message`, the same pairing LangGraph's own `MessagesState` uses) are both required for LangServe's auto-derived Pydantic schema to resolve a JSON message like `{"type": "human", ...}` into a real `HumanMessage` — the generic `BaseMessage` type has no discriminator, so it deserializes JSON messages into a bare `BaseMessage` instance that the chat-model client (Gemini or OpenAI) rejects.
 - `next: str` — the supervisor's routing decision.
 
 Message conventions that the routing and output depend on:

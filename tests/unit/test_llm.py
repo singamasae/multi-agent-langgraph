@@ -29,7 +29,30 @@ def test_build_chat_model_maps_role_to_settings(
     assert kwargs["thinking_budget"] == settings.thinking_budget
 
 
+def test_build_chat_model_uses_openai_when_role_provider_is_openai(mocker, monkeypatch):
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
+    monkeypatch.setenv("WRITER_PROVIDER", "openai")
+    monkeypatch.setenv("WRITER_MODEL", "gpt-4o-mini")
+    from app.config import Settings
+
+    settings = Settings(_env_file=None)
+    fake_openai = mocker.patch("app.llm.ChatOpenAI")
+    fake_google = mocker.patch("app.llm.ChatGoogleGenerativeAI")
+
+    build_chat_model("writer", settings)
+
+    fake_google.assert_not_called()
+    _, kwargs = fake_openai.call_args
+    assert kwargs["model"] == "gpt-4o-mini"
+    assert kwargs["temperature"] == settings.writer_temperature
+    # The SecretStr is passed straight through so it stays masked in reprs.
+    assert kwargs["api_key"].get_secret_value() == "openai-key"
+    assert kwargs["base_url"] == settings.openai_base_url
+
+
 def test_build_chat_model_rejects_unknown_role(mocker, settings):
     mocker.patch("app.llm.ChatGoogleGenerativeAI")
+    mocker.patch("app.llm.ChatOpenAI")
     with pytest.raises(ValueError, match="Unknown LLM role"):
         build_chat_model("nonexistent", settings)

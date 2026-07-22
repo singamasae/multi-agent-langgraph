@@ -4,7 +4,7 @@
 
 1. **Explore** — read the relevant modules (and this folder) before changing anything. Reuse the existing `build_*` / `make_*` factories and the `Settings` seam rather than adding new ones.
 2. **Plan** — state the approach and the test(s) before writing code.
-3. **Code** — TDD: write the failing test first, then the implementation. All comments/descriptions in **English**. Never hardcode config (add a field to `Settings`); never construct a Gemini client or the search tool inside a node (inject via `GraphDependencies`).
+3. **Code** — TDD: write the failing test first, then the implementation. All comments/descriptions in **English**. Never hardcode config (add a field to `Settings`); never construct a provider LLM client (Gemini or OpenAI) or the search tool inside a node (inject via `GraphDependencies`).
 4. **Verify** — `pytest -q` green **offline** (no `GOOGLE_API_KEY`), then `ruff` and `mypy` clean, then a manual smoke of the CLI and API.
 5. **Commit** — only when the user asks. Conventional message.
 
@@ -14,7 +14,7 @@
 - The researcher node surfaces only the ReAct agent's **last** message (intermediate tool chatter is dropped).
 - The roster lives once in `constants.AgentName`; `MEMBERS` / `ROUTE_OPTIONS` derive from it, and `test_supervisor` guards that `RouteResponse`'s `Literal` still agrees.
 - Tests must never require a real key or network — mock at the `GraphDependencies` boundary.
-- Only `llm.py` constructs a Gemini client; only `graph/dependencies.py` assembles real agents/tools.
+- Only `llm.py` constructs a provider LLM client (Gemini or OpenAI); only `graph/dependencies.py` assembles real agents/tools.
 
 ## Commands
 
@@ -22,7 +22,7 @@
 # setup
 python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt -r requirements-dev.txt
-cp .env.example .env            # set GOOGLE_API_KEY
+cp .env.example .env            # set the key(s) for the provider(s) you use (GOOGLE_API_KEY and/or OPENAI_API_KEY)
 
 # run
 python main.py "Your research prompt here"    # CLI
@@ -61,6 +61,7 @@ If the project should become truly installable later, the clean upgrade is a min
   - `create_react_agent` uses `prompt=` (the old `state_modifier=` was removed).
   - `AgentState` uses `typing_extensions.TypedDict`, not `typing.TypedDict` — LangServe's pydantic schema generation requires it on Python < 3.12.
 - The DuckDuckGo tool comes from `langchain-community` (being sunset) and now delegates to the **`ddgs`** package. Both are pinned in `requirements.txt`; the sunset `DeprecationWarning` is filtered in `pytest.ini`.
+- **Providers are pluggable per role.** `llm.py` builds a Gemini client (`langchain-google-genai`) or an OpenAI client (`langchain-openai`) based on the role's `*_PROVIDER` setting; both packages are pinned in `requirements.txt`. Adding a provider means extending `VALID_PROVIDERS` in `config.py` and the dispatch in `llm.py` — nothing downstream changes.
 - `AgentName` subclasses `(str, Enum)` because `enum.StrEnum` is 3.11+.
 - The langgraph `add_node` stubs don't infer plain `(state) -> dict` node callables, so those three calls in `graph/builder.py` carry a localised `# type: ignore[call-overload]` — this is third-party typing friction, not a real type error.
 

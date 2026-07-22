@@ -19,6 +19,10 @@ def test_defaults_are_applied(monkeypatch):
     settings = Settings(_env_file=None)
 
     tunables = [
+        "supervisor_provider",
+        "researcher_provider",
+        "writer_provider",
+        "openai_base_url",
         "supervisor_model",
         "researcher_model",
         "writer_model",
@@ -46,6 +50,36 @@ def test_missing_api_key_fails_fast(monkeypatch):
 def test_placeholder_api_key_is_rejected(monkeypatch):
     monkeypatch.setenv("GOOGLE_API_KEY", "your_api_key_here")
     with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
+
+def test_openai_provider_requires_openai_key(monkeypatch):
+    # A role targeting openai without OPENAI_API_KEY must fail fast, even
+    # though GOOGLE_API_KEY is present.
+    monkeypatch.setenv("GOOGLE_API_KEY", "real-key")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("WRITER_PROVIDER", "openai")
+    with pytest.raises(ValidationError, match="OPENAI_API_KEY"):
+        Settings(_env_file=None)
+
+
+def test_google_key_not_required_when_all_roles_use_openai(monkeypatch):
+    # An OpenAI-only deployment need not supply a Gemini key.
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
+    for role in ("SUPERVISOR_PROVIDER", "RESEARCHER_PROVIDER", "WRITER_PROVIDER"):
+        monkeypatch.setenv(role, "openai")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.writer_provider == "openai"
+    assert settings.google_api_key is None
+
+
+def test_unknown_provider_is_rejected(monkeypatch):
+    monkeypatch.setenv("GOOGLE_API_KEY", "real-key")
+    monkeypatch.setenv("SUPERVISOR_PROVIDER", "anthropic")
+    with pytest.raises(ValidationError, match="SUPERVISOR_PROVIDER"):
         Settings(_env_file=None)
 
 

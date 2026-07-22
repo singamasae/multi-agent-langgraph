@@ -1,9 +1,11 @@
 """Application configuration (12-factor: all config lives in the environment).
 
 A single :class:`Settings` object holds every tunable that used to be hardcoded
-across the codebase (model names, temperatures, search width, recursion limit,
-API host/port, logging). The secret ``GOOGLE_API_KEY`` is read from its
-conventional unprefixed name; every other setting is namespaced under ``AAAS_``.
+across the codebase (per-role provider + model, temperatures, search width,
+recursion limit, API host/port, logging). Each role can target Google Gemini or
+OpenAI; the secrets ``GOOGLE_API_KEY`` / ``OPENAI_API_KEY`` are read from their
+conventional unprefixed names, and a provider's key is only required when a role
+actually uses it. Every other field maps to its uppercased name.
 
 Factories never call :func:`get_settings` themselves — the composition root and
 the interface entry points read settings once and pass concrete values down,
@@ -12,12 +14,25 @@ keeping the domain pure and the whole graph testable without the environment.
 
 import functools
 
-from pydantic import AliasChoices, Field, SecretStr, field_validator
+from pydantic import AliasChoices, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# The literal shipped in ``.env.example``; treated as "unset" so a user who
-# forgot to fill it in gets a clear failure instead of a confusing API error.
+# The literals shipped in ``.env.example``; treated as "unset" so a user who
+# forgot to fill one in gets a clear failure instead of a confusing API error.
 PLACEHOLDER_API_KEY = "your_api_key_here"
+PLACEHOLDER_OPENAI_API_KEY = "your_openai_api_key_here"
+_PLACEHOLDERS = {PLACEHOLDER_API_KEY, PLACEHOLDER_OPENAI_API_KEY}
+
+# Providers a role may target. Each maps to a concrete client in ``llm.py``.
+VALID_PROVIDERS = {"google", "openai"}
+
+
+def _key_is_unset(secret: "SecretStr | None") -> bool:
+    """True if a key is missing, blank, or still an ``.env.example`` placeholder."""
+    if secret is None:
+        return True
+    raw = secret.get_secret_value().strip()
+    return not raw or raw in _PLACEHOLDERS
 
 
 class Settings(BaseSettings):
@@ -30,13 +45,29 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
+    # Provider API keys. Each is optional here and only *required* (fail-fast)
+    # if a role actually targets that provider — see ``_validate_keys_in_use``.
     # Every field maps to its uppercased name in the environment, e.g.
     # writer_model -> WRITER_MODEL, log_level -> LOG_LEVEL.
-    google_api_key: SecretStr = Field(
+    google_api_key: SecretStr | None = Field(
+        default=None,
         validation_alias=AliasChoices("GOOGLE_API_KEY"),
     )
+    openai_api_key: SecretStr | None = Field(
+        default=None,
+        validation_alias=AliasChoices("OPENAI_API_KEY"),
+    )
+    # Optional override for OpenAI-compatible endpoints (Azure, local, proxies).
+    openai_base_url: str | None = None
 
-    # Per-role model selection.
+    # Per-role provider selection ("google" or "openai"). Defaults to Gemini
+    # everywhere so existing deployments keep working unchanged.
+    supervisor_provider: str = "google"
+    researcher_provider: str = "google"
+    writer_provider: str = "google"
+
+    # Per-role model selection. Defaults are Gemini; when a role's provider is
+    # "openai", set the matching *_MODEL to an OpenAI model (e.g. gpt-4o-mini).
     supervisor_model: str = "gemini-flash-lite-latest"
     researcher_model: str = "gemini-flash-lite-latest"
     writer_model: str = "gemini-flash-lite-latest"
@@ -66,16 +97,38 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_format: str = "text"  # "text" for local dev, "json" for structured logs.
 
-    @field_validator("google_api_key")
-    @classmethod
-    def _reject_missing_or_placeholder_key(cls, value: SecretStr) -> SecretStr:
-        raw = value.get_secret_value().strip()
-        if not raw or raw == PLACEHOLDER_API_KEY:
+    @model_validator(mode="after")
+    def _validate_providers(self) -> "Settings":
+        """Reject unknown providers and fail fast on a missing key in use.
+
+        A provider's API key is only required when at least one role targets
+        that provider, so a Gemini-only or OpenAI-only deployment need not
+        supply the other's key.
+        """
+        role_providers = {
+            "SUPERVISOR_PROVIDER": self.supervisor_provider,
+            "RESEARCHER_PROVIDER": self.researcher_provider,
+            "WRITER_PROVIDER": self.writer_provider,
+        }
+        for name, provider in role_providers.items():
+            if provider not in VALID_PROVIDERS:
+                raise ValueError(
+                    f"{name}={provider!r} is invalid; expected one of "
+                    f"{sorted(VALID_PROVIDERS)}."
+                )
+
+        providers_in_use = set(role_providers.values())
+        if "google" in providers_in_use and _key_is_unset(self.google_api_key):
             raise ValueError(
                 "GOOGLE_API_KEY is not set. Provide a real Gemini API key in the "
                 "environment or the .env file (see .env.example)."
             )
-        return value
+        if "openai" in providers_in_use and _key_is_unset(self.openai_api_key):
+            raise ValueError(
+                "OPENAI_API_KEY is not set but a role targets the 'openai' "
+                "provider. Provide a real OpenAI API key (see .env.example)."
+            )
+        return self
 
 
 @functools.lru_cache(maxsize=1)

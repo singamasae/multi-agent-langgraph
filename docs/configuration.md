@@ -14,14 +14,19 @@ The project follows **12-factor** config: every tunable comes from the environme
 
 | Variable | Default | Notes |
 |----------|---------|-------|
-| `GOOGLE_API_KEY` | *(required)* | Gemini API key. Stored as `SecretStr` (never logged). **Fail-fast**: missing or the `.env.example` placeholder raises at startup. |
-| `SUPERVISOR_MODEL` | `gemini-flash-lite-latest` | Router model. |
+| `GOOGLE_API_KEY` | *(required if any role uses `google`)* | Gemini API key. Stored as `SecretStr` (never logged). **Fail-fast**: if a role targets `google` and this is missing or the `.env.example` placeholder, startup raises. |
+| `OPENAI_API_KEY` | *(required if any role uses `openai`)* | OpenAI API key. Stored as `SecretStr`. Fail-fast when a role targets `openai`. |
+| `OPENAI_BASE_URL` | *(unset)* | Optional override for OpenAI-compatible endpoints (Azure, proxies, local servers). |
+| `SUPERVISOR_PROVIDER` | `google` | Router provider: `google` or `openai`. |
+| `RESEARCHER_PROVIDER` | `google` | ReAct researcher provider: `google` or `openai`. |
+| `WRITER_PROVIDER` | `google` | Writer provider: `google` or `openai`. |
+| `SUPERVISOR_MODEL` | `gemini-flash-lite-latest` | Router model. Set to an OpenAI model (e.g. `gpt-4o-mini`) when its provider is `openai`. |
 | `RESEARCHER_MODEL` | `gemini-flash-lite-latest` | ReAct researcher model. |
 | `WRITER_MODEL` | `gemini-flash-lite-latest` | Writer model. |
 | `SUPERVISOR_TEMPERATURE` | `0.0` | |
 | `RESEARCHER_TEMPERATURE` | `0.0` | |
 | `WRITER_TEMPERATURE` | `0.7` | |
-| `THINKING_BUDGET` | `0` | Gemini "thinking" tokens. `0` disables thinking so the model returns answer text; thinking-enabled models (e.g. `*-flash-lite`) can otherwise return reasoning-only content with no answer. `-1` = model's dynamic default. |
+| `THINKING_BUDGET` | `0` | **Gemini only.** "Thinking" tokens. `0` disables thinking so the model returns answer text; thinking-enabled models (e.g. `*-flash-lite`) can otherwise return reasoning-only content with no answer. `-1` = model's dynamic default. Ignored for OpenAI roles. |
 | `SEARCH_MAX_RESULTS` | `3` | DuckDuckGo result count. |
 | `RECURSION_LIMIT` | `50` | Safety bound on the supervisor/worker loop. |
 | `API_HOST` | `127.0.0.1` | Server bind host. Use `0.0.0.0` in containers. |
@@ -34,9 +39,11 @@ The canonical, commented list is in [`../.env.example`](../.env.example). Option
 ## Usage
 
 ```bash
-cp .env.example .env          # then set GOOGLE_API_KEY
+cp .env.example .env          # then set the key(s) for the provider(s) in use
 # override anything inline:
 WRITER_TEMPERATURE=0.3 SEARCH_MAX_RESULTS=1 LOG_FORMAT=json python main.py "…"
+# run the writer on OpenAI, keep routing/research on Gemini:
+OPENAI_API_KEY=sk-... WRITER_PROVIDER=openai WRITER_MODEL=gpt-4o-mini python main.py "…"
 ```
 
 ## Adding a new setting

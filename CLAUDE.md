@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-`aaas_mvp` ("Agent-as-a-Service" MVP) is a supervisor/worker multi-agent research-and-writing workflow built on LangGraph and Google Gemini, with DuckDuckGo web search. It runs as either a one-shot CLI or a LangServe REST API, over a single shared graph.
+`aaas_mvp` ("Agent-as-a-Service" MVP) is a supervisor/worker multi-agent research-and-writing workflow built on LangGraph, with pluggable LLM providers (Google Gemini and OpenAI, selectable per role) and DuckDuckGo web search. It runs as either a one-shot CLI or a LangServe REST API, over a single shared graph.
 
 The codebase follows a clean-architecture layering with dependency injection, 12-factor configuration, and a test suite that runs fully offline.
 
@@ -25,7 +25,7 @@ Setup (a `venv/` is committed; recreate if needed):
 ```bash
 python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt -r requirements-dev.txt
-cp .env.example .env   # then set GOOGLE_API_KEY to a real Gemini key
+cp .env.example .env   # set GOOGLE_API_KEY (default provider); set OPENAI_API_KEY too if a role uses openai
 ```
 
 Run:
@@ -53,7 +53,7 @@ Layered so that domain logic never touches external SDKs directly and the whole 
 src/app/
   constants.py        AgentName enum — single source of truth for the roster
   config.py           Settings (pydantic-settings) + get_settings()
-  llm.py              build_chat_model(role, settings) — ONLY place a Gemini client is constructed
+  llm.py              build_chat_model(role, settings) — ONLY place a provider LLM client is built; dispatches per role to Gemini or OpenAI
   logging_config.py   configure_logging(settings)
   state.py            AgentState (typing_extensions.TypedDict; messages reducer = add_messages)
   tools/search.py     build_search_tool(settings)
@@ -65,25 +65,25 @@ main.py, serve.py     thin shims that add src/ to sys.path and call the interfac
 
 Dependency direction: `interfaces/` → `graph/` → `agents/` + `tools/`. `constants`/`config`/`llm`/`logging` are shared support the edges read.
 
-**Control flow.** `build_graph(deps)` compiles a `StateGraph`: `START → Supervisor`; the supervisor (`gemini-flash-lite-latest`, structured `RouteResponse`) writes `state["next"]`; conditional edges route to a worker or to `END` on `FINISH`; every worker edges back to the supervisor. The loop is bounded by `settings.recursion_limit`, passed at invoke time. Researcher is a `create_react_agent` with search; Writer is a toolless chain. All model names are per-role settings (see [`docs/configuration.md`](docs/configuration.md)).
+**Control flow.** `build_graph(deps)` compiles a `StateGraph`: `START → Supervisor`; the supervisor (structured `RouteResponse`; default `gemini-flash-lite-latest`) writes `state["next"]`; conditional edges route to a worker or to `END` on `FINISH`; every worker edges back to the supervisor. The loop is bounded by `settings.recursion_limit`, passed at invoke time. Researcher is a `create_react_agent` with search; Writer is a toolless chain. Provider and model are per-role settings (`*_PROVIDER` + `*_MODEL`; see [`docs/configuration.md`](docs/configuration.md)).
 
 **Dependency injection is the core seam.** Each agent module exposes a pure `build_*` factory (takes an injected model/tools, returns a runnable) and a `make_*_node` adapter (wraps it as a LangGraph node). `graph/dependencies.py::build_dependencies(settings)` is the *only* place real models/tools/agents are assembled into a `GraphDependencies`; `build_graph` consumes that dataclass. Tests inject a `GraphDependencies` full of fakes, so no test constructs a real model or hits the network.
 
 ## Configuration (12-factor)
 
-All tunables live in `Settings` (`config.py`) and come from the environment (no prefix — each field maps to its uppercased name). `GOOGLE_API_KEY` is required and fail-fast (rejected if missing or still the `.env.example` placeholder). The rest are optional with defaults: `SUPERVISOR_MODEL`/`RESEARCHER_MODEL`/`WRITER_MODEL`, `*_TEMPERATURE`, `SEARCH_MAX_RESULTS`, `RECURSION_LIMIT`, `API_HOST`/`API_PORT`, `LOG_LEVEL`/`LOG_FORMAT`. See `.env.example` for the full list and defaults. The key is a `SecretStr` (never logged). Factories never call `get_settings()` — settings are read once at the edges and passed down.
+All tunables live in `Settings` (`config.py`) and come from the environment (no prefix — each field maps to its uppercased name). Each role picks a provider via `SUPERVISOR_PROVIDER`/`RESEARCHER_PROVIDER`/`WRITER_PROVIDER` (`"google"` | `"openai"`, default `google`). Provider keys `GOOGLE_API_KEY` and `OPENAI_API_KEY` are **fail-fast but only when a role actually uses that provider** (rejected if missing or still the `.env.example` placeholder) — a Gemini-only or OpenAI-only deployment needs just one. The rest are optional with defaults: `SUPERVISOR_MODEL`/`RESEARCHER_MODEL`/`WRITER_MODEL`, `*_TEMPERATURE`, `THINKING_BUDGET` (Gemini-only), `OPENAI_BASE_URL`, `SEARCH_MAX_RESULTS`, `RECURSION_LIMIT`, `API_HOST`/`API_PORT`, `LOG_LEVEL`/`LOG_FORMAT`. See `.env.example` for the full list and defaults. Both keys are `SecretStr` (never logged). Factories never call `get_settings()` — settings are read once at the edges and passed down.
 
 ## Workflow: Explore → Plan → Code → Verify → Commit
 
 1. **Explore** — read the relevant modules before changing anything; reuse the existing `build_*`/`make_*` factories and the `Settings` seam rather than adding new ones.
 2. **Plan** — state the approach and the test(s) before writing code.
-3. **Code** — TDD: write the failing test first, then the implementation. All comments/descriptions in **English**. Never hardcode config (add a field to `Settings`); never construct a Gemini client or the search tool inside a node (inject it via `GraphDependencies`).
+3. **Code** — TDD: write the failing test first, then the implementation. All comments/descriptions in **English**. Never hardcode config (add a field to `Settings`); never construct a provider LLM client (Gemini or OpenAI) or the search tool inside a node (inject it via `GraphDependencies`).
 4. **Verify** — `pytest -q` green **offline** (no `GOOGLE_API_KEY`), `ruff` and `mypy` clean, then a manual smoke of the CLI and API.
 5. **Commit** — only when the user asks. Conventional message.
 
 ## Invariants (do not break)
 
-- **Never read, open, print, cat, log, or otherwise expose the contents of `.env`** (or any real secret value). `.env` holds live credentials. To learn what config exists, read `.env.example` (which contains only placeholders) — never the real `.env`. Do not echo secret values into terminal output, code, commits, test fixtures, or chat, even when debugging. `GOOGLE_API_KEY` is a `SecretStr` precisely so it stays out of logs and reprs; keep it that way.
+- **Never read, open, print, cat, log, or otherwise expose the contents of `.env`** (or any real secret value). `.env` holds live credentials. To learn what config exists, read `.env.example` (which contains only placeholders) — never the real `.env`. Do not echo secret values into terminal output, code, commits, test fixtures, or chat, even when debugging. `GOOGLE_API_KEY` and `OPENAI_API_KEY` are `SecretStr` precisely so they stay out of logs and reprs; keep it that way.
 - Worker `AIMessage`s carry `name=` (`"Researcher"`/`"Writer"`) — routing and output depend on it.
 - The researcher node surfaces only the react agent's **last** message (intermediate tool chatter is dropped).
 - The roster lives once in `constants.AgentName`; `MEMBERS`/`ROUTE_OPTIONS` derive from it, and `test_supervisor` guards that `RouteResponse`'s `Literal` still agrees.
@@ -99,4 +99,5 @@ All tunables live in `Settings` (`config.py`) and come from the environment (no 
 
 - LangChain **1.x** / LangGraph **1.x** are installed (not the old 0.x). Consequences baked into the code: `create_react_agent` uses `prompt=` (not the removed `state_modifier=`); `AgentState` uses `typing_extensions.TypedDict` (LangServe's pydantic schema generation requires it on Python < 3.12).
 - The DuckDuckGo tool comes from `langchain-community` (being sunset) and now delegates to the `ddgs` package. Both are pinned in `requirements.txt`; the sunset `DeprecationWarning` is filtered in `pytest.ini`.
+- LLM providers are pluggable per role: `llm.py` builds a Gemini client (`langchain-google-genai`) or an OpenAI client (`langchain-openai`) from the role's `*_PROVIDER`. Both are pinned in `requirements.txt`. To add a provider, extend `VALID_PROVIDERS` in `config.py` and the dispatch in `llm.py` — nothing downstream changes.
 - `AgentName` subclasses `(str, Enum)` because `enum.StrEnum` is 3.11+.

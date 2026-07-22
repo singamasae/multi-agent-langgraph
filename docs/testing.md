@@ -7,7 +7,7 @@ The suite is **fully offline** — it requires no `GOOGLE_API_KEY` and makes no 
 ```bash
 pip install -r requirements.txt -r requirements-dev.txt
 
-pytest -q                                        # full suite (30 tests)
+pytest -q                                        # full suite (43 tests)
 pytest tests/unit/test_supervisor.py -q          # one file
 pytest tests/unit/test_config.py::test_missing_api_key_fails_fast   # one test
 
@@ -19,7 +19,7 @@ mypy src/app                                     # type-check
 
 ## Strategy: mock at the injection boundary
 
-The two external boundaries — the **Gemini LLM** and **DuckDuckGo search** — are the only things faked, and they are substituted via `GraphDependencies`, not by patching deep internals or the network layer.
+The two external boundaries — the **provider LLM** (Gemini or OpenAI) and **DuckDuckGo search** — are the only things faked, and they are substituted via `GraphDependencies`, not by patching deep internals or the network layer.
 
 Test doubles live in `tests/fakes.py`:
 
@@ -42,9 +42,9 @@ tests/
 ├── fakes.py                    # test doubles
 ├── unit/
 │   ├── test_constants.py       # roster SSOT; RouteResponse Literal matches ROUTE_OPTIONS
-│   ├── test_config.py          # fail-fast, env overrides, SecretStr masking, caching
+│   ├── test_config.py          # per-provider fail-fast, provider validation, env overrides, SecretStr masking, caching
 │   ├── test_state.py           # messages reducer appends
-│   ├── test_llm.py             # role → (model, temperature) mapping; unknown role rejected
+│   ├── test_llm.py             # role → (provider, model, temperature) mapping; Gemini/OpenAI dispatch; unknown role rejected
 │   ├── test_search_tool.py     # configured max_results (no network)
 │   ├── test_supervisor.py      # node returns {"next": …}, adds no messages
 │   ├── test_researcher.py      # emits only last message, tagged name="Researcher"
