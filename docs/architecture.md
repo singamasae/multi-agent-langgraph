@@ -120,7 +120,7 @@ Settings ─► build_dependencies(settings) ─► GraphDependencies ─► bui
 ```
 
 - **CLI** (`main.py` → `cli.main`): one prompt in, final Markdown answer to stdout — or to a file with `-o/--output PATH`. Only the basename of `PATH` is used (a `.md` extension is added if missing) and the file always lands in the output directory (`OUTPUT_DIR`, default `download/`), which is created on demand. The answer is taken from the last Writer-authored message; an empty answer (or an output path with no filename) is reported as an error rather than written. Diagnostics go through the logger.
-- **API** (`serve.py` → `api.create_app`): FastAPI with LangServe routes under `/research` (`/invoke`, `/batch`, `/playground`, …) and a `/` redirect to `/docs`.
+- **API** (`serve.py` → `api.create_app`): FastAPI with LangServe routes under `/research` (`/invoke`, `/batch`, `/stream`, `/playground`, …), a `/` redirect to `/docs`, and a minimal live-status demo at `/ui`. The demo consumes the auto-exposed SSE endpoint `POST /research/stream`, mapping its `metadata → data → end` events to **started → working → finished** (`error` on failure). CORS is off unless `CORS_ALLOW_ORIGINS` is set (the same-origin `/ui` demo needs none).
 
 The root `main.py`/`serve.py` are thin launch shims that put `src/` on the path and call into `interfaces/`. See [development.md](development.md) for why they live at the root.
 

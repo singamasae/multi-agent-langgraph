@@ -33,7 +33,7 @@ Run:
 ```bash
 python main.py "Your research prompt here"   # CLI; prints the final answer, diagnostics go to the log
 python main.py "Your research prompt here" -o report   # write answer to OUTPUT_DIR/report.md (default download/)
-python serve.py                               # API on the configured host/port (default 127.0.0.1:8000)
+python serve.py                               # API on the configured host/port (default 127.0.0.1:8000); live-status demo at /ui
 ```
 
 Verify (all run offline — no API key, no network):
@@ -72,7 +72,7 @@ Dependency direction: `interfaces/` → `graph/` → `agents/` + `tools/`. `cons
 
 ## Configuration (12-factor)
 
-All tunables live in `Settings` (`config.py`) and come from the environment (no prefix — each field maps to its uppercased name). Each role picks a provider via `SUPERVISOR_PROVIDER`/`RESEARCHER_PROVIDER`/`WRITER_PROVIDER` (`"google"` | `"openai"`, default `google`). Provider keys `GOOGLE_API_KEY` and `OPENAI_API_KEY` are **fail-fast but only when a role actually uses that provider** (rejected if missing or still the `.env.example` placeholder) — a Gemini-only or OpenAI-only deployment needs just one. The rest are optional with defaults: `SUPERVISOR_MODEL`/`RESEARCHER_MODEL`/`WRITER_MODEL`, `*_TEMPERATURE`, `THINKING_BUDGET` (Gemini-only), `OPENAI_BASE_URL`, `SEARCH_MAX_RESULTS`, `RECURSION_LIMIT`, `OUTPUT_DIR` (CLI `-o` output folder, default `download`), `API_HOST`/`API_PORT`, `LOG_LEVEL`/`LOG_FORMAT`. See `.env.example` for the full list and defaults. Both keys are `SecretStr` (never logged). Factories never call `get_settings()` — settings are read once at the edges and passed down.
+All tunables live in `Settings` (`config.py`) and come from the environment (no prefix — each field maps to its uppercased name). Each role picks a provider via `SUPERVISOR_PROVIDER`/`RESEARCHER_PROVIDER`/`WRITER_PROVIDER` (`"google"` | `"openai"`, default `google`). Provider keys `GOOGLE_API_KEY` and `OPENAI_API_KEY` are **fail-fast but only when a role actually uses that provider** (rejected if missing or still the `.env.example` placeholder) — a Gemini-only or OpenAI-only deployment needs just one. The rest are optional with defaults: `SUPERVISOR_MODEL`/`RESEARCHER_MODEL`/`WRITER_MODEL`, `*_TEMPERATURE`, `THINKING_BUDGET` (Gemini-only), `OPENAI_BASE_URL`, `SEARCH_MAX_RESULTS`, `RECURSION_LIMIT`, `OUTPUT_DIR` (CLI `-o` output folder, default `download`), `API_HOST`/`API_PORT`, `CORS_ALLOW_ORIGINS` (empty = CORS off; the same-origin `/ui` demo needs none), `LOG_LEVEL`/`LOG_FORMAT`. See `.env.example` for the full list and defaults. Both keys are `SecretStr` (never logged). Factories never call `get_settings()` — settings are read once at the edges and passed down.
 
 ## Workflow: Explore → Plan → Code → Verify → Commit
 

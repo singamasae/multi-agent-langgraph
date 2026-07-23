@@ -35,6 +35,7 @@ def test_defaults_are_applied(monkeypatch):
         "output_dir",
         "api_host",
         "api_port",
+        "cors_allow_origins",
         "log_level",
         "log_format",
     ]
@@ -87,6 +88,17 @@ def test_unknown_provider_is_rejected(monkeypatch):
 def test_output_dir_defaults_to_download(monkeypatch):
     monkeypatch.setenv("GOOGLE_API_KEY", "real-key")
     assert Settings(_env_file=None).output_dir == "download"
+
+
+def test_cors_origins_list_parses_and_defaults_empty(monkeypatch):
+    monkeypatch.setenv("GOOGLE_API_KEY", "real-key")
+    assert Settings(_env_file=None).cors_origins_list == []
+
+    monkeypatch.setenv("CORS_ALLOW_ORIGINS", "http://a.com, http://b.com ,")
+    assert Settings(_env_file=None).cors_origins_list == [
+        "http://a.com",
+        "http://b.com",
+    ]
 
 
 def test_app_settings_are_overridable_via_env(monkeypatch):

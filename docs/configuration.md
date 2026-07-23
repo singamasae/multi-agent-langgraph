@@ -32,6 +32,7 @@ The project follows **12-factor** config: every tunable comes from the environme
 | `OUTPUT_DIR` | `download` | Folder the CLI `-o`/`--output` writes Markdown into. Only the basename of the `-o` value is used, so the file always lands here. |
 | `API_HOST` | `127.0.0.1` | Server bind host. Use `0.0.0.0` in containers. |
 | `API_PORT` | `8000` | Server port. |
+| `CORS_ALLOW_ORIGINS` | *(empty)* | Comma-separated browser origins allowed to call the API cross-origin. Empty disables the CORS middleware — fine when the front-end is served same-origin (e.g. the built-in `/ui` demo). Set e.g. `http://localhost:3000` for a separate front-end. |
 | `LOG_LEVEL` | `INFO` | Standard logging level. |
 | `LOG_FORMAT` | `text` | `text` for local dev, `json` for structured logs. |
 

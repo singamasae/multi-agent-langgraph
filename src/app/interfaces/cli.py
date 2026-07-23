@@ -2,7 +2,6 @@
 
 import argparse
 import logging
-import os
 import sys
 from typing import Optional, Sequence
 
@@ -10,51 +9,18 @@ from langchain_core.messages import HumanMessage
 from pydantic import ValidationError
 
 from ..config import Settings
-from ..constants import AgentName
 from ..graph.builder import build_graph
 from ..graph.dependencies import build_dependencies
 from ..logging_config import configure_logging
+from ..output import final_answer_text as _final_answer_text
+from ..output import write_markdown as _write_markdown
 
 logger = logging.getLogger(__name__)
-
-
-def _final_answer_text(messages) -> str:
-    """Return the Writer's answer as plain text.
-
-    Prefers the most recent Writer-authored message (the supervisor may route
-    elsewhere after the Writer), falling back to the last message. `.text`
-    normalises str/list content to a string (and is empty when the model
-    returned no text — e.g. reasoning-only or blocked output).
-    """
-    for message in reversed(messages):
-        if getattr(message, "name", None) == AgentName.WRITER.value:
-            return str(message.text)
-    return str(messages[-1].text) if messages else ""
 
 
 def _load_settings() -> Settings:
     """Load settings (seam so tests can inject or force failure)."""
     return Settings()
-
-
-def _write_markdown(content: str, path: str, output_dir: str) -> str:
-    """Write ``content`` to a Markdown file inside ``output_dir``.
-
-    Only the basename of ``path`` is used, so the file always lands in
-    ``output_dir`` regardless of any directories the caller passed. Ensures a
-    ``.md`` extension and creates the directory. Raises ``ValueError`` if the
-    basename is empty (e.g. a trailing-slash path like ``"foo/"``).
-    """
-    filename = os.path.basename(path)
-    if not filename:
-        raise ValueError(f"--output value {path!r} has no filename component.")
-    if not filename.lower().endswith(".md"):
-        filename = f"{filename}.md"
-    os.makedirs(output_dir, exist_ok=True)
-    target = os.path.join(output_dir, filename)
-    with open(target, "w", encoding="utf-8") as handle:
-        handle.write(content if content.endswith("\n") else content + "\n")
-    return target
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:

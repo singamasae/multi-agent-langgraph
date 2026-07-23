@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AaaS Research — Agent Status</title>
+  <style>
+    :root {
+      --bg: #0f1220; --card: #1a1f36; --fg: #e7e9f2; --muted: #9aa0b4;
+      --idle: #3a4160;
+      /* One distinct hue per status. */
+      --started: #8892b0;   /* neutral grey  */
+      --routing: #a855f7;   /* purple        */
+      --researching: #4a90e2; /* blue        */
+      --writing: #f5a623;   /* amber         */
+      --finished: #38c172;  /* green         */
+      --error: #e3342f;     /* red           */
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; background: var(--bg); color: var(--fg);
+      font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px;
+    }
+    .card {
+      background: var(--card); width: 100%; max-width: 660px; border-radius: 14px;
+      padding: 28px; box-shadow: 0 10px 40px rgba(0,0,0,.35);
+    }
+    h1 { margin: 0 0 4px; font-size: 20px; }
+    p.sub { margin: 0 0 20px; color: var(--muted); font-size: 13px; }
+    textarea {
+      width: 100%; min-height: 84px; resize: vertical; border-radius: 10px;
+      border: 1px solid #2b3255; background: #10142a; color: var(--fg);
+      padding: 12px; font: inherit;
+    }
+    button {
+      margin-top: 12px; padding: 10px 18px; border: 0; border-radius: 10px;
+      background: var(--researching); color: #fff; font: inherit; font-weight: 600;
+      cursor: pointer;
+    }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+
+    /* Headline status — the dot + label take the current phase colour. */
+    .status { display: flex; align-items: center; gap: 12px; margin: 24px 0 6px; }
+    .dot {
+      width: 16px; height: 16px; border-radius: 50%; background: var(--phase, var(--idle));
+      flex: none; transition: background .2s;
+    }
+    .dot.busy { animation: pulse 1s ease-in-out infinite; }
+    @keyframes pulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.5); opacity: .5; } }
+    .label { font-weight: 600; color: var(--phase, var(--muted)); }
+
+    /* Agent timeline */
+    ul.timeline { list-style: none; margin: 12px 0 0; padding: 0; }
+    ul.timeline li {
+      display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px;
+      margin-bottom: 6px; background: #10142a; border-left: 4px solid var(--row, var(--idle));
+    }
+    li .icon { width: 18px; text-align: center; flex: none; }
+    li .name { font-weight: 600; }
+    li .detail { color: var(--muted); font-size: 13px; }
+    li.active .name { color: var(--row); }
+    li.active .icon { animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    pre#answer {
+      margin-top: 20px; white-space: pre-wrap; word-break: break-word;
+      background: #10142a; border-radius: 10px; padding: 14px; color: var(--fg);
+      max-height: 320px; overflow: auto; display: none;
+    }
+    pre#answer.show { display: block; }
+    .saved { margin-top: 10px; font-size: 13px; color: var(--finished); display: none; }
+    .saved.show { display: block; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>Agent status</h1>
+    <p class="sub">Trigger the research agent and watch each step live — routing, the active researcher, and the writer. The result is saved as Markdown into the server's <code>download/</code> folder.</p>
+
+    <textarea id="prompt" placeholder="e.g. What are the latest BYD electric vehicles?"></textarea>
+    <button id="run">Run agent</button>
+
+    <div class="status">
+      <span id="dot" class="dot"></span>
+      <span id="label" class="label">idle</span>
+    </div>
+
+    <ul id="timeline" class="timeline"></ul>
+
+    <div id="saved" class="saved"></div>
+    <pre id="answer"></pre>
+  </main>
+
+  <script>
+    const runBtn = document.getElementById("run");
+    const promptEl = document.getElementById("prompt");
+    const dot = document.getElementById("dot");
+    const label = document.getElementById("label");
+    const timelineEl = document.getElementById("timeline");
+    const answerEl = document.getElementById("answer");
+    const savedEl = document.getElementById("saved");
+
+    // A distinct colour per status (matches the CSS variables above).
+    const PHASE_COLOUR = {
+      started: "var(--started)", routing: "var(--routing)",
+      researching: "var(--researching)", writing: "var(--writing)",
+      finished: "var(--finished)", error: "var(--error)",
+    };
+
+    // Prettify an agent node name: "TechnologyResearcher" -> "Technology".
+    function pretty(agent) {
+      if (!agent) return "";
+      return agent.replace(/Researcher$/, "").replace(/([a-z])([A-Z])/g, "$1 $2");
+    }
+
+    function setHeadline(phase, text, busy) {
+      const colour = PHASE_COLOUR[phase] || "var(--idle)";
+      dot.style.setProperty("--phase", colour);
+      dot.className = "dot" + (busy ? " busy" : "");
+      label.style.setProperty("--phase", colour);
+      label.textContent = text;
+    }
+
+    // Timeline rows keyed by a step id (one per agent, plus writer).
+    const rows = new Map();
+    function upsertRow(key, { icon, name, detail, phase, active, done }) {
+      let li = rows.get(key);
+      if (!li) {
+        li = document.createElement("li");
+        li.innerHTML = '<span class="icon"></span><span class="name"></span><span class="detail"></span>';
+        timelineEl.appendChild(li);
+        rows.set(key, li);
+      }
+      const colour = PHASE_COLOUR[phase] || "var(--idle)";
+      li.style.setProperty("--row", done ? "var(--finished)" : colour);
+      li.className = active ? "active" : "";
+      li.querySelector(".icon").textContent = done ? "✓" : (active ? "◐" : icon || "•");
+      li.querySelector(".name").textContent = name;
+      li.querySelector(".detail").textContent = detail || "";
+    }
+
+    function resetUI() {
+      timelineEl.innerHTML = "";
+      rows.clear();
+      answerEl.classList.remove("show");
+      answerEl.textContent = "";
+      savedEl.classList.remove("show");
+      savedEl.textContent = "";
+    }
+
+    // Minimal SSE frame parser over the fetch() body (native EventSource is
+    // GET-only). The server sends "\n"-separated frames (sep="\n").
+    function parseFrames(buffer) {
+      const frames = [];
+      let idx;
+      while ((idx = buffer.indexOf("\n\n")) !== -1) {
+        const raw = buffer.slice(0, idx);
+        buffer = buffer.slice(idx + 2);
+        let event = "message";
+        const dataLines = [];
+        for (const line of raw.replace(/\r/g, "").split("\n")) {
+          if (line.startsWith("event:")) event = line.slice(6).trim();
+          else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+        }
+        frames.push({ event, data: dataLines.join("\n") });
+      }
+      return { frames, rest: buffer };
+    }
+
+    function handleStatus(d) {
+      if (d.phase === "started") {
+        setHeadline("started", "Started…", true);
+        upsertRow("supervisor", { name: "Supervisor", detail: "routing…", phase: "routing", active: true });
+      } else if (d.phase === "researching") {
+        setHeadline("researching", "Researching — " + pretty(d.agent) + "…", true);
+        upsertRow("supervisor", { name: "Supervisor", detail: "routed", phase: "routing", done: true });
+        upsertRow("r:" + d.agent, { name: pretty(d.agent) + " researcher", detail: "searching…", phase: "researching", active: true });
+      } else if (d.phase === "writing") {
+        setHeadline("writing", "Writing the answer…", true);
+        upsertRow("supervisor", { name: "Supervisor", detail: "routed", phase: "routing", done: true });
+        upsertRow("writer", { name: "Writer", detail: "composing…", phase: "writing", active: true });
+      } else if (d.phase === "agent_done") {
+        const key = d.agent === "Writer" ? "writer" : "r:" + d.agent;
+        const name = d.agent === "Writer" ? "Writer" : pretty(d.agent) + " researcher";
+        upsertRow(key, { name, detail: "done", done: true });
+      }
+    }
+
+    async function run() {
+      const prompt = promptEl.value.trim();
+      if (!prompt) { promptEl.focus(); return; }
+
+      runBtn.disabled = true;
+      resetUI();
+      setHeadline("started", "Started…", true);
+
+      try {
+        const resp = await fetch("/run", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt }),
+        });
+        if (!resp.ok || !resp.body) throw new Error("HTTP " + resp.status);
+
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let errored = false;
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const { frames, rest } = parseFrames(buffer);
+          buffer = rest;
+          for (const f of frames) {
+            let d = {};
+            try { d = f.data ? JSON.parse(f.data) : {}; } catch (_) { /* ignore */ }
+            if (f.event === "status") handleStatus(d);
+            else if (f.event === "result") {
+              answerEl.textContent = d.answer || "";
+              answerEl.classList.add("show");
+              if (d.path) { savedEl.textContent = "Saved to " + d.path; savedEl.classList.add("show"); }
+            } else if (f.event === "error") {
+              errored = true;
+              setHeadline("error", "Error", false);
+              answerEl.textContent = "Error: " + (d.message || "unknown error");
+              answerEl.classList.add("show");
+            }
+          }
+        }
+        if (!errored) setHeadline("finished", "Finished", false);
+      } catch (err) {
+        setHeadline("error", "Error", false);
+        answerEl.textContent = "Error: " + err.message;
+        answerEl.classList.add("show");
+      } finally {
+        runBtn.disabled = false;
+      }
+    }
+
+    runBtn.addEventListener("click", run);
+    setHeadline("started", "idle", false);
+    label.textContent = "idle";
+    dot.style.setProperty("--phase", "var(--idle)");
+    label.style.setProperty("--phase", "var(--muted)");
+  </script>
+</body>
+</html>

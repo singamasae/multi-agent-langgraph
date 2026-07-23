@@ -97,9 +97,20 @@ class Settings(BaseSettings):
     api_host: str = "127.0.0.1"
     api_port: int = 8000
 
+    # Comma-separated browser origins allowed to call the API cross-origin
+    # (CORS). Empty (default) disables the CORS middleware — fine when the
+    # front-end is served same-origin (e.g. the built-in /ui demo). Set e.g.
+    # "http://localhost:3000" when a separate front-end origin calls the API.
+    cors_allow_origins: str = ""
+
     # Logging.
     log_level: str = "INFO"
     log_format: str = "text"  # "text" for local dev, "json" for structured logs.
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        """`cors_allow_origins` split into a clean list (empty when unset)."""
+        return [o.strip() for o in self.cors_allow_origins.split(",") if o.strip()]
 
     @model_validator(mode="after")
     def _validate_providers(self) -> "Settings":
