@@ -32,6 +32,7 @@ def test_defaults_are_applied(monkeypatch):
         "thinking_budget",
         "search_max_results",
         "recursion_limit",
+        "output_dir",
         "api_host",
         "api_port",
         "log_level",
@@ -83,17 +84,24 @@ def test_unknown_provider_is_rejected(monkeypatch):
         Settings(_env_file=None)
 
 
+def test_output_dir_defaults_to_download(monkeypatch):
+    monkeypatch.setenv("GOOGLE_API_KEY", "real-key")
+    assert Settings(_env_file=None).output_dir == "download"
+
+
 def test_app_settings_are_overridable_via_env(monkeypatch):
     monkeypatch.setenv("GOOGLE_API_KEY", "real-key")
     monkeypatch.setenv("WRITER_TEMPERATURE", "0.1")
     monkeypatch.setenv("SEARCH_MAX_RESULTS", "1")
     monkeypatch.setenv("API_PORT", "9001")
+    monkeypatch.setenv("OUTPUT_DIR", "reports")
 
     settings = Settings(_env_file=None)
 
     assert settings.writer_temperature == 0.1
     assert settings.search_max_results == 1
     assert settings.api_port == 9001
+    assert settings.output_dir == "reports"
 
 
 def test_secret_key_is_masked_but_retrievable(monkeypatch):

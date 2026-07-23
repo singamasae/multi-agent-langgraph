@@ -37,15 +37,21 @@ def _load_settings() -> Settings:
     return Settings()
 
 
-def _write_markdown(content: str, path: str) -> str:
-    """Write ``content`` to a Markdown file, returning the path actually used.
+def _write_markdown(content: str, path: str, output_dir: str) -> str:
+    """Write ``content`` to a Markdown file inside ``output_dir``.
 
-    Ensures a ``.md`` extension and creates parent directories as needed.
+    Only the basename of ``path`` is used, so the file always lands in
+    ``output_dir`` regardless of any directories the caller passed. Ensures a
+    ``.md`` extension and creates the directory. Raises ``ValueError`` if the
+    basename is empty (e.g. a trailing-slash path like ``"foo/"``).
     """
-    target = path if path.lower().endswith(".md") else f"{path}.md"
-    directory = os.path.dirname(target)
-    if directory:
-        os.makedirs(directory, exist_ok=True)
+    filename = os.path.basename(path)
+    if not filename:
+        raise ValueError(f"--output value {path!r} has no filename component.")
+    if not filename.lower().endswith(".md"):
+        filename = f"{filename}.md"
+    os.makedirs(output_dir, exist_ok=True)
+    target = os.path.join(output_dir, filename)
     with open(target, "w", encoding="utf-8") as handle:
         handle.write(content if content.endswith("\n") else content + "\n")
     return target
@@ -62,8 +68,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "-o",
         "--output",
         metavar="PATH",
-        help="Write the final answer to a Markdown file (a .md extension is "
-        "added if missing) instead of printing it to stdout.",
+        help="Write the final answer to a Markdown file inside the output "
+        "directory (default 'download/', see OUTPUT_DIR) instead of printing "
+        "it to stdout. Only the filename is used and a .md extension is added "
+        "if missing.",
     )
     args = parser.parse_args(argv)
 
@@ -102,7 +110,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 1
 
     if args.output:
-        written_path = _write_markdown(final_answer, args.output)
+        try:
+            written_path = _write_markdown(
+                final_answer, args.output, settings.output_dir
+            )
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
         print(f"Final answer written to {written_path}")
     else:
         print(final_answer)

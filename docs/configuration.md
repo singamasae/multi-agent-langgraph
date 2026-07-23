@@ -29,6 +29,7 @@ The project follows **12-factor** config: every tunable comes from the environme
 | `THINKING_BUDGET` | `0` | **Gemini only.** "Thinking" tokens. `0` disables thinking so the model returns answer text; thinking-enabled models (e.g. `*-flash-lite`) can otherwise return reasoning-only content with no answer. `-1` = model's dynamic default. Ignored for OpenAI roles. |
 | `SEARCH_MAX_RESULTS` | `3` | DuckDuckGo result count. |
 | `RECURSION_LIMIT` | `50` | Safety bound on the supervisor/worker loop. |
+| `OUTPUT_DIR` | `download` | Folder the CLI `-o`/`--output` writes Markdown into. Only the basename of the `-o` value is used, so the file always lands here. |
 | `API_HOST` | `127.0.0.1` | Server bind host. Use `0.0.0.0` in containers. |
 | `API_PORT` | `8000` | Server port. |
 | `LOG_LEVEL` | `INFO` | Standard logging level. |
@@ -44,6 +45,10 @@ cp .env.example .env          # then set the key(s) for the provider(s) in use
 WRITER_TEMPERATURE=0.3 SEARCH_MAX_RESULTS=1 LOG_FORMAT=json python main.py "…"
 # run the writer on OpenAI, keep routing/research on Gemini:
 OPENAI_API_KEY=sk-... WRITER_PROVIDER=openai WRITER_MODEL=gpt-4o-mini python main.py "…"
+# write the answer to a file: lands in download/report.md (only the basename is used):
+python main.py "…" -o report
+# change the output folder:
+OUTPUT_DIR=reports python main.py "…" -o report   # → reports/report.md
 ```
 
 ## Adding a new setting

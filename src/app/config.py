@@ -89,6 +89,10 @@ class Settings(BaseSettings):
     # Safety bound on the supervisor/worker loop.
     recursion_limit: int = 50
 
+    # Directory the CLI writes -o/--output Markdown files into. Only the
+    # basename of the -o value is used; the file always lands here.
+    output_dir: str = "download"
+
     # HTTP server bind address.
     api_host: str = "127.0.0.1"
     api_port: int = 8000

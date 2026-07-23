@@ -7,7 +7,7 @@ The suite is **fully offline** — it requires no `GOOGLE_API_KEY` and makes no 
 ```bash
 pip install -r requirements.txt -r requirements-dev.txt
 
-pytest -q                                        # full suite (47 tests)
+pytest -q                                        # full suite (50 tests)
 pytest tests/unit/test_supervisor.py -q          # one file
 pytest tests/unit/test_config.py::test_missing_api_key_fails_fast   # one test
 
@@ -52,7 +52,7 @@ tests/
 │   └── test_graph_builder.py   # composition-root wiring (one agent per topic) + graph topology (all specialist nodes/edges)
 └── integration/
     ├── test_graph_flow.py      # full compiled graph: routes specialist→Writer→FINISH; recursion cap trips
-    ├── test_cli.py             # main() prints answer / fails fast on config error
+    ├── test_cli.py             # main() prints answer / writes -o Markdown into OUTPUT_DIR (basename only) / empty-answer + no-filename guards / fails fast on config error
     └── test_api.py             # FastAPI TestClient: / redirect + POST /research/invoke
 ```
 

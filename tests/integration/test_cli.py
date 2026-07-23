@@ -48,7 +48,8 @@ def test_cli_writes_final_answer_to_markdown_file(
     from app.config import Settings
 
     mocker.patch(
-        "app.interfaces.cli._load_settings", return_value=Settings(_env_file=None)
+        "app.interfaces.cli._load_settings",
+        return_value=Settings(_env_file=None, output_dir=str(tmp_path)),
     )
     mocker.patch(
         "app.interfaces.cli.build_dependencies",
@@ -56,7 +57,7 @@ def test_cli_writes_final_answer_to_markdown_file(
     )
     out_file = tmp_path / "result.md"
 
-    exit_code = main(["research prompt", "--output", str(out_file)])
+    exit_code = main(["research prompt", "--output", "result"])
 
     assert exit_code == 0
     assert out_file.read_text(encoding="utf-8") == "# Report\n\nFindings body.\n"
@@ -64,6 +65,52 @@ def test_cli_writes_final_answer_to_markdown_file(
     stdout = capsys.readouterr().out
     assert str(out_file) in stdout
     assert "Findings body." not in stdout
+
+
+def test_cli_writes_into_output_dir_ignoring_directories_in_path(
+    mocker, monkeypatch, tmp_path, fake_deps
+):
+    # Only the basename of -o is used; the file always lands in output_dir,
+    # regardless of any leading directories (relative or absolute).
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-key")
+    from app.config import Settings
+
+    mocker.patch(
+        "app.interfaces.cli._load_settings",
+        return_value=Settings(_env_file=None, output_dir=str(tmp_path)),
+    )
+    mocker.patch(
+        "app.interfaces.cli.build_dependencies",
+        return_value=fake_deps(writer_content="body"),
+    )
+
+    exit_code = main(["prompt", "-o", "/somewhere/else/report.md"])
+
+    assert exit_code == 0
+    assert (tmp_path / "report.md").read_text(encoding="utf-8") == "body\n"
+    # The leading directories are ignored, not created.
+    assert not (tmp_path / "somewhere").exists()
+
+
+def test_cli_rejects_output_path_with_no_filename(
+    mocker, capsys, monkeypatch, tmp_path, fake_deps
+):
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-key")
+    from app.config import Settings
+
+    mocker.patch(
+        "app.interfaces.cli._load_settings",
+        return_value=Settings(_env_file=None, output_dir=str(tmp_path)),
+    )
+    mocker.patch(
+        "app.interfaces.cli.build_dependencies",
+        return_value=fake_deps(writer_content="body"),
+    )
+
+    exit_code = main(["prompt", "-o", "foo/"])
+
+    assert exit_code == 1
+    assert "no filename" in capsys.readouterr().err
 
 
 def test_cli_handles_list_content_from_the_model(
@@ -75,7 +122,8 @@ def test_cli_handles_list_content_from_the_model(
     from app.config import Settings
 
     mocker.patch(
-        "app.interfaces.cli._load_settings", return_value=Settings(_env_file=None)
+        "app.interfaces.cli._load_settings",
+        return_value=Settings(_env_file=None, output_dir=str(tmp_path)),
     )
     mocker.patch(
         "app.interfaces.cli.build_dependencies",
@@ -88,7 +136,7 @@ def test_cli_handles_list_content_from_the_model(
     )
     out_file = tmp_path / "result.md"
 
-    exit_code = main(["prompt", "-o", str(out_file)])
+    exit_code = main(["prompt", "-o", "result"])
 
     assert exit_code == 0
     assert out_file.read_text(encoding="utf-8") == "# Title\n\nBody\n"
@@ -101,7 +149,8 @@ def test_cli_warns_and_writes_nothing_on_empty_answer(
     from app.config import Settings
 
     mocker.patch(
-        "app.interfaces.cli._load_settings", return_value=Settings(_env_file=None)
+        "app.interfaces.cli._load_settings",
+        return_value=Settings(_env_file=None, output_dir=str(tmp_path)),
     )
     mocker.patch(
         "app.interfaces.cli.build_dependencies",
@@ -109,7 +158,7 @@ def test_cli_warns_and_writes_nothing_on_empty_answer(
     )
     out_file = tmp_path / "result.md"
 
-    exit_code = main(["prompt", "-o", str(out_file)])
+    exit_code = main(["prompt", "-o", "result"])
 
     assert exit_code == 1
     assert not out_file.exists()  # no empty file left behind
@@ -123,14 +172,15 @@ def test_cli_appends_md_extension_when_missing(
     from app.config import Settings
 
     mocker.patch(
-        "app.interfaces.cli._load_settings", return_value=Settings(_env_file=None)
+        "app.interfaces.cli._load_settings",
+        return_value=Settings(_env_file=None, output_dir=str(tmp_path)),
     )
     mocker.patch(
         "app.interfaces.cli.build_dependencies",
         return_value=fake_deps(writer_content="body"),
     )
 
-    main(["prompt", "-o", str(tmp_path / "report")])
+    main(["prompt", "-o", "report"])
 
     assert (tmp_path / "report.md").exists()
 
